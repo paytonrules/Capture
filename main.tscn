@@ -1,0 +1,25 @@
+[gd_scene format=2]
+
+[node name="Main" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="ColorRect" type="ColorRect" parent="."]
+margin_right = 600.0
+margin_bottom = 1024.0
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Login" type="Button" parent="ColorRect"]
+margin_left = 200.0
+margin_top = 432.0
+margin_right = 406.0
+margin_bottom = 482.0
+text = "Log In"
+__meta__ = {
+"_edit_use_anchors_": false
+}

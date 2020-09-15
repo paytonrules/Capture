@@ -1,0 +1,8 @@
+#+TITLE: Todo List for "Capture"
+
+* TODO Setup Rust Skeleton
+* TODO Create UI Interface
+* TODO Build and run on MacOS
+* TODO Setup CI on .gitlab
+* TODO Install on my phone
+* TODO
