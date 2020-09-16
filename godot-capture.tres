@@ -1,0 +1,9 @@
+[gd_resource type="GDNativeLibrary" format=2]
+
+[resource]
+entry/OSX.64 = "res://godot-capture/target/debug/libgodot_capture.dylib"
+entry/iOS.armv7 = "res://godot-capture/target/debug/libgodot_capture.dylib"
+entry/iOS.arm64 = "res://godot-capture/target/debug/libgodot_capture.dylib"
+dependency/OSX.64 = [  ]
+dependency/iOS.armv7 = [  ]
+dependency/iOS.arm64 = [  ]
