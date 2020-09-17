@@ -81,3 +81,5 @@ Cargo.lock
 # End of https://www.toptal.com/developers/gitignore/api/godot,rust,emacs
 
 godot-capture/target
+.DS_Store
+iOSApp
