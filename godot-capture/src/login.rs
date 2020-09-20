@@ -12,15 +12,15 @@ impl Login {
     }
 
     #[export]
-    fn _button_pressed(&self, owner: TRef<Button>) {
-        owner
-            .get_tree()
-            .map(|tree| unsafe { tree.assume_safe() })
-            .map(|tree| {
-                tree.change_scene("res://CaptureNote.tscn");
-            });
-        //        let url = "https://gitlab.example.com/oauth/authorize?client_id=APP_ID&redirect_uri=REDIRECT_URI&response_type=token&state=YOUR_UNIQUE_STATE_HASH&scope=REQUESTED_SCOPES";
-        //        OS::godot_singleton().shell_open(url);
+    fn _button_pressed(&self, _owner: TRef<Button>) {
+        /*        owner
+        .get_tree()
+        .map(|tree| unsafe { tree.assume_safe() })
+        .map(|tree| {
+            tree.change_scene("res://CaptureNote.tscn");
+        });*/
+        let url = "https://gitlab.example.com/oauth/authorize?client_id=APP_ID&redirect_uri=REDIRECT_URI&response_type=token&state=YOUR_UNIQUE_STATE_HASH&scope=REQUESTED_SCOPES";
+        OS::godot_singleton().shell_open(url).expect("should open");
         //
         //
     }

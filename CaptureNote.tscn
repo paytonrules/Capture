@@ -45,6 +45,11 @@ margin_right = 321.0
 margin_bottom = 296.0
 rect_min_size = Vector2( 0, 240 )
 custom_fonts/font = ExtResource( 2 )
+text = "todoitem"
+highlight_current_line = true
+context_menu_enabled = false
+shortcut_keys_enabled = false
+selecting_enabled = false
 wrap_enabled = true
 __meta__ = {
 "_edit_use_anchors_": false
