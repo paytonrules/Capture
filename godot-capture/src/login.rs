@@ -12,7 +12,7 @@ impl Login {
     }
 
     #[export]
-    fn _button_pressed(&self, owner: &Button) {
+    fn _button_pressed(&self, owner: TRef<Button>) {
         owner
             .get_tree()
             .map(|tree| unsafe { tree.assume_safe() })
