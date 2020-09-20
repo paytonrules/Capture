@@ -3,5 +3,7 @@
 [resource]
 entry/OSX.64 = "res://godot-capture/target/debug/libgodot_capture.dylib"
 entry/iOS.arm64 = "res://godot-capture/target/universal/debug/libgodot_capture.a"
+entry/iOS.x86_64 = "res://godot-capture/target/x86_64-apple-ios/debug/libgodot_capture.a"
 dependency/OSX.64 = [  ]
 dependency/iOS.arm64 = [  ]
+dependency/iOS.x86_64 = [  ]
