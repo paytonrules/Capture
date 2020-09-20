@@ -1,1 +1,3 @@
 Requires cargo lipo to build the iOS version
+- When exporting I had to re-add the godot_library because the path exported wrong.
+- Make sure you go to the build settings (for the workspace not the project) and search for DWARF - Debug Information Format needs to be set to DWARF not DWARF with dSYM file in order to build.
