@@ -19,6 +19,10 @@ config/name="Capture"
 run/main_scene="res://main.tscn"
 config/icon="res://icon.png"
 
+[autoload]
+
+OAuthListener="*res://oauth_listener.gdns"
+
 [display]
 
 window/size/width=600
