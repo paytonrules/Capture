@@ -6,20 +6,16 @@ use std::thread;
 
 struct OAuthServer {
     address: String,
-    token: Arc<Mutex<Option<String>>>,
 }
 
 impl OAuthServer {
     fn new(address: String) -> Self {
-        OAuthServer {
-            address,
-            token: Arc::new(Mutex::new(None)),
-        }
+        OAuthServer { address }
     }
 
-    fn start(&self) {
+    fn start(&self) -> std::sync::mpsc::Receiver<String> {
         let address = self.address.clone();
-        let token = self.token.clone();
+        let (send, recv) = std::sync::mpsc::channel();
         thread::spawn(move || {
             let listener = TcpListener::bind(address).unwrap();
 
@@ -43,16 +39,14 @@ impl OAuthServer {
                             param_slice.find(|pair| pair.starts_with("access_token="))
                         {
                             let received_token = token_pair.split('=').last();
-                            token
-                                .lock()
-                                .unwrap()
-                                .replace(received_token.map(|s| s.to_string()).unwrap());
+                            send.send(received_token.map(|s| s.to_string()).unwrap());
                         }
                     }
                     Err(_err) => println!("Error of some kind {}", _err),
                 }
             }
         });
+        recv
     }
 }
 
@@ -71,27 +65,24 @@ impl Listener {
 mod tests {
     use super::*;
     use std::io::Write;
-    use std::thread::sleep;
-    use std::time::Duration;
 
     #[test]
     fn test_stores_access_token_from_redirect() -> std::io::Result<()> {
         let server = OAuthServer::new("127.0.0.1:8080".to_string());
-        server.start();
-        let token = server.token.clone();
+        let tokenCh = server.start();
 
         let redirect = b"GET /capture#access_token=token&state=state&token_type=bearer&expires_in=3600 HTTP/1.1\r\n";
         let mut connection = TcpStream::connect("127.0.0.1:8080")?;
         connection.write(redirect);
 
-        sleep(Duration::new(3, 0));
-        assert_eq!(token.lock().unwrap().as_ref(), Some(&"token".to_string()));
+        assert_eq!(tokenCh.recv(), Ok("token".to_string()));
 
         Ok(())
     }
 
+    // test error
     // test shutdown
-    // test state matches
+    // test state has matches (and is random)
     // Whatcha gonna do with expiration?
     // Invalid URLs
     // Ensure we hit a valid port
