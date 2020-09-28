@@ -1,0 +1,24 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+
+<html>
+<head>
+
+  <script type="text/javascript">
+    document.addEventListener("DOMContentLoaded", (event) => {
+        const hashAsParams = new URLSearchParams(
+            window.location.hash.substr(1)
+        );
+        fetch("/save_token", {
+            method: 'POST',
+            body: hashAsParams
+        });
+    });
+  </script>
+
+  <title></title>
+</head>
+
+<body>
+  <p>Login Successful, return to the Capture app.</p>
+</body>
+</html>

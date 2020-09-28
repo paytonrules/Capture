@@ -1,7 +1,7 @@
 use gdnative::api::OS;
 use gdnative::prelude::*;
 
-const GITLAB_URI: &str = "https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=http://127.0.0.1:8000/capture/&response_type=token&state=100&scope=api";
+const GITLAB_URI: &str = "https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=http://127.0.0.1:8080/capture/&response_type=token&state=100&scope=api";
 
 #[derive(NativeClass)]
 #[inherit(Button)]

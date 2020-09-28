@@ -1,50 +1,59 @@
 use gdnative::prelude::*;
-use std::io::Read;
-use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use rocket::config::{Config, Environment};
+use rocket::request::Form;
+use rocket::State;
+use rocket_contrib::templates::Template;
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::{collections::HashMap, thread};
 
-struct OAuthServer {
-    address: String,
+#[get("/capture")]
+fn capture() -> Template {
+    let context: HashMap<String, String> = HashMap::new();
+    Template::render("capture", &context)
 }
 
+#[derive(FromForm, Debug)]
+struct Token {
+    access_token: String,
+    token_type: String,
+    state: String,
+}
+
+#[post("/save_token", data = "<token>")]
+fn save_token(
+    token_sender: State<SyncSender<String>>,
+    token: Form<Token>,
+) -> Result<(), std::sync::mpsc::SendError<String>> {
+    token_sender.send(token.access_token.clone())
+}
+
+fn rocket(port: u16, sender: SyncSender<String>) -> rocket::Rocket {
+    let config = Config::build(Environment::Development)
+        .address("127.0.0.1")
+        .port(port)
+        .unwrap();
+
+    rocket::custom(config)
+        .attach(Template::fairing())
+        .manage(sender)
+        .mount("/", routes![capture, save_token])
+}
+
+// TODO rename (OauthProvider? Something that's less "serverish")
+struct OAuthServer;
+
 impl OAuthServer {
-    fn new(address: String) -> Self {
-        OAuthServer { address }
+    fn new() -> Self {
+        OAuthServer
     }
 
-    fn start(&self) -> std::sync::mpsc::Receiver<String> {
-        let address = self.address.clone();
-        let (send, recv) = std::sync::mpsc::channel();
+    fn start(&self) -> Receiver<String> {
+        let (send, recv) = sync_channel(1);
+
+        let server = rocket(8080, send);
+
         thread::spawn(move || {
-            let listener = TcpListener::bind(address).unwrap();
-
-            for stream in listener.incoming() {
-                match stream {
-                    Ok(mut stream) => {
-                        let mut buffer = [0; 512];
-                        stream.read(&mut buffer).unwrap();
-
-                        let mut buffer_slice = buffer.split(|c| *c == b' ');
-                        let _method = buffer_slice.next().unwrap();
-                        let url = buffer_slice.next().unwrap();
-                        let url_string = std::str::from_utf8(url).unwrap();
-
-                        let mut url_slice = url_string.split('#');
-                        let _route = url_slice.next().unwrap();
-                        let param_string = url_slice.next().unwrap();
-
-                        let mut param_slice = param_string.split('&');
-                        if let Some(token_pair) =
-                            param_slice.find(|pair| pair.starts_with("access_token="))
-                        {
-                            let received_token = token_pair.split('=').last();
-                            send.send(received_token.map(|s| s.to_string()).unwrap());
-                        }
-                    }
-                    Err(_err) => println!("Error of some kind {}", _err),
-                }
-            }
+            server.launch();
         });
         recv
     }
@@ -59,31 +68,78 @@ impl Listener {
     fn new(_owner: &Node) -> Self {
         Listener
     }
+
+    #[export]
+    fn _ready(&self, _owner: TRef<Node>) {
+        let server = OAuthServer::new();
+        let _tokench = server.start();
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use rocket::http::{ContentType, Status};
+    use rocket::local::Client;
 
     #[test]
-    fn test_stores_access_token_from_redirect() -> std::io::Result<()> {
-        let server = OAuthServer::new("127.0.0.1:8080".to_string());
-        let tokenCh = server.start();
+    fn test_spawns_webserver_on_start() -> std::io::Result<()> {
+        let server = OAuthServer::new();
+        let _tokench = server.start();
 
-        let redirect = b"GET /capture#access_token=token&state=state&token_type=bearer&expires_in=3600 HTTP/1.1\r\n";
-        let mut connection = TcpStream::connect("127.0.0.1:8080")?;
-        connection.write(redirect);
+        let res = ureq::get(
+            "http://127.0.0.1:8080/capture/#access_token=token&token_type=Bearer&state=100",
+        )
+        .call();
 
-        assert_eq!(tokenCh.recv(), Ok("token".to_string()));
+        assert_eq!(200, res.status());
+        Ok(())
+    }
+
+    // Ensure we hit a valid port
+    // shutdown
+    // token expiration
+
+    #[test]
+    fn rocket_constructor_uses_passed_in_port() {
+        let (send, _recv) = sync_channel(1);
+        let rocket = rocket(8000, send);
+
+        assert_eq!(8000, rocket.config().port);
+    }
+
+    #[test]
+    fn capture_renders_a_simple_web_page() -> Result<(), Box<dyn std::error::Error>> {
+        let (send, _recv) = sync_channel(1);
+        let client = Client::new(rocket(8080, send))?;
+
+        let mut response = client.get("/capture").dispatch();
+
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.content_type(), Some(ContentType::HTML));
+        assert!(response
+            .body_string()
+            .ok_or("Error getting html body")?
+            .contains("Login Successful"));
 
         Ok(())
     }
 
-    // test error
-    // test shutdown
-    // test state has matches (and is random)
-    // Whatcha gonna do with expiration?
-    // Invalid URLs
-    // Ensure we hit a valid port
+    #[test]
+    fn posting_to_save_token_sends_the_token_to_the_channel(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let (send, recv) = sync_channel(1);
+        let client = Client::new(rocket(8080, send))?;
+
+        let response = client
+            .post("/save_token")
+            .body("access_token=token&state=ignore&token_type=ignore")
+            .header(ContentType::Form)
+            .dispatch();
+
+        assert_eq!(Ok("token".to_string()), recv.recv());
+        assert_eq!(Status::Ok, response.status());
+        Ok(())
+    }
+    // test state has matches
 }
