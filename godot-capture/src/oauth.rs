@@ -2,14 +2,12 @@ use gdnative::prelude::*;
 use rocket::config::{Config, Environment};
 use rocket::request::Form;
 use rocket::State;
-use rocket_contrib::templates::Template;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
-use std::{collections::HashMap, thread};
+use std::thread;
 
 #[get("/capture")]
-fn capture() -> Template {
-    let context: HashMap<String, String> = HashMap::new();
-    Template::render("capture", &context)
+fn capture<'a>() -> rocket::response::content::Html<&'a str> {
+    rocket::response::content::Html("<p>Login Successful</p>")
 }
 
 #[derive(FromForm, Debug)]
@@ -34,7 +32,6 @@ fn rocket(port: u16, sender: SyncSender<String>) -> rocket::Rocket {
         .unwrap();
 
     rocket::custom(config)
-        .attach(Template::fairing())
         .manage(sender)
         .mount("/", routes![capture, save_token])
 }
@@ -61,18 +58,31 @@ impl OAuthServer {
 
 #[derive(NativeClass)]
 #[inherit(Node)]
-pub struct Listener;
+pub struct Listener {
+    token_receiver: Option<Receiver<String>>,
+}
 
 #[methods]
 impl Listener {
     fn new(_owner: &Node) -> Self {
-        Listener
+        Listener {
+            token_receiver: None,
+        }
     }
 
     #[export]
-    fn _ready(&self, _owner: TRef<Node>) {
+    fn _ready(&mut self, _owner: TRef<Node>) {
         let server = OAuthServer::new();
-        let _tokench = server.start();
+        self.token_receiver = Some(server.start());
+    }
+
+    #[export]
+    fn _process(&self, _owner: TRef<Node>, _delta: f64) {
+        if let Some(token_receiver) = &self.token_receiver {
+            if let Ok(token) = token_receiver.try_recv() {
+                godot_print!("token! {}", token);
+            }
+        }
     }
 }
 
