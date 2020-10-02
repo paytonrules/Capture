@@ -5,6 +5,10 @@ use rocket::State;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::thread;
 
+// Take a mock object in the Oauth struct
+// Choose an available port rather than being hard coded to 8080
+//
+
 const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
 
 <html>
@@ -50,15 +54,13 @@ fn save_token(
     token_sender.send(token.access_token.clone())
 }
 
-fn rocket(port: u16, sender: SyncSender<String>) -> rocket::Rocket {
+fn rocket(port: u16) -> rocket::Rocket {
     let config = Config::build(Environment::Development)
         .address("127.0.0.1")
         .port(port)
         .unwrap();
 
-    rocket::custom(config)
-        .manage(sender)
-        .mount("/", routes![capture, save_token])
+    rocket::custom(config).mount("/", routes![capture, save_token])
 }
 
 // TODO rename (OauthProvider? Something that's less "serverish")
@@ -69,10 +71,10 @@ impl OAuthServer {
         OAuthServer
     }
 
-    fn start(&self) -> Receiver<String> {
+    fn start(&self, server: rocket::Rocket) -> Receiver<String> {
         let (send, recv) = sync_channel(1);
 
-        let server = rocket(8080, send);
+        let server = server.manage(send);
 
         thread::spawn(move || {
             server.launch();
@@ -98,7 +100,8 @@ impl Listener {
     #[export]
     fn _ready(&mut self, _owner: TRef<Node>) {
         let server = OAuthServer::new();
-        self.token_receiver = Some(server.start());
+        let rocket = rocket(8080);
+        self.token_receiver = Some(server.start(rocket));
     }
 
     #[export]
@@ -120,7 +123,7 @@ mod tests {
     #[test]
     fn test_spawns_webserver_on_start() -> std::io::Result<()> {
         let server = OAuthServer::new();
-        let _tokench = server.start();
+        let _tokench = server.start(rocket(8080));
 
         let res = ureq::get(
             "http://127.0.0.1:8080/capture/#access_token=token&token_type=Bearer&state=100",
@@ -131,22 +134,16 @@ mod tests {
         Ok(())
     }
 
-    // Ensure we hit a valid port
-    // shutdown
-    // token expiration
-
     #[test]
     fn rocket_constructor_uses_passed_in_port() {
-        let (send, _recv) = sync_channel(1);
-        let rocket = rocket(8000, send);
+        let rocket = rocket(8000);
 
         assert_eq!(8000, rocket.config().port);
     }
 
     #[test]
     fn capture_renders_a_simple_web_page() -> Result<(), Box<dyn std::error::Error>> {
-        let (send, _recv) = sync_channel(1);
-        let client = Client::new(rocket(8080, send))?;
+        let client = Client::new(rocket(8080))?;
 
         let mut response = client.get("/capture").dispatch();
 
@@ -164,7 +161,8 @@ mod tests {
     fn posting_to_save_token_sends_the_token_to_the_channel(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (send, recv) = sync_channel(1);
-        let client = Client::new(rocket(8080, send))?;
+        let rocket = rocket(8080).manage(send);
+        let client = Client::new(rocket)?;
 
         let response = client
             .post("/save_token")
@@ -176,5 +174,4 @@ mod tests {
         assert_eq!(Status::Ok, response.status());
         Ok(())
     }
-    // test state has matches
 }
