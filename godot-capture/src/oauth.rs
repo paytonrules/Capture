@@ -5,9 +5,34 @@ use rocket::State;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::thread;
 
+const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+
+<html>
+<head>
+
+  <script type="text/javascript">
+    document.addEventListener("DOMContentLoaded", (event) => {
+        const hashAsParams = new URLSearchParams(
+            window.location.hash.substr(1)
+        );
+        fetch("/save_token", {
+            method: 'POST',
+            body: hashAsParams
+        });
+    });
+  </script>
+
+  <title></title>
+</head>
+
+<body>
+  <p>Login Successful, return to the Capture app.</p>
+</body>
+</html>"#;
+
 #[get("/capture")]
-fn capture<'a>() -> rocket::response::content::Html<&'a str> {
-    rocket::response::content::Html("<p>Login Successful</p>")
+fn capture() -> rocket::response::content::Html<&'static str> {
+    rocket::response::content::Html(LOGIN_SUCCESSFUL_PAGE)
 }
 
 #[derive(FromForm, Debug)]
