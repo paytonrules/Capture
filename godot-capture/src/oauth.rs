@@ -1,6 +1,7 @@
 use gdnative::prelude::*;
 use rocket::config::{Config, Environment};
 use rocket::request::Form;
+use rocket::response::content::Html;
 use rocket::State;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::thread;
@@ -35,8 +36,8 @@ const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html PUBLIC "-//W3C//DT
 </html>"#;
 
 #[get("/capture")]
-fn capture() -> rocket::response::content::Html<&'static str> {
-    rocket::response::content::Html(LOGIN_SUCCESSFUL_PAGE)
+fn capture() -> Html<&'static str> {
+    Html(LOGIN_SUCCESSFUL_PAGE)
 }
 
 #[derive(FromForm, Debug)]
