@@ -65,8 +65,8 @@ fn rocket(port: u16) -> rocket::Rocket {
 }
 
 trait WebServer {
-    fn manage<T: Send + Sync + 'static>(self, state: T) -> Self;
-    fn launch(self) -> rocket::error::LaunchError;
+    fn manage(self, state: SyncSender<String>) -> Self;
+    fn launch(self);
 }
 
 struct RocketWrapper {
@@ -74,13 +74,13 @@ struct RocketWrapper {
 }
 
 impl WebServer for RocketWrapper {
-    fn manage<T: Send + Sync + 'static>(self, state: T) -> Self {
+    fn manage(self, state: SyncSender<String>) -> Self {
         RocketWrapper {
             rocket: self.rocket.manage(state),
         }
     }
-    fn launch(self) -> rocket::error::LaunchError {
-        self.rocket.launch()
+    fn launch(self) {
+        self.rocket.launch();
     }
 }
 
@@ -92,7 +92,7 @@ impl OAuthServer {
         OAuthServer
     }
 
-    fn start(&self, server: RocketWrapper) -> Receiver<String> {
+    fn start<T: WebServer + Send + Sync + 'static>(&self, server: T) -> Receiver<String> {
         let (send, recv) = sync_channel(1);
 
         let server = server.manage(send);
@@ -134,6 +134,7 @@ impl Listener {
         if let Some(token_receiver) = &self.token_receiver {
             if let Ok(token) = token_receiver.try_recv() {
                 godot_print!("token! {}", token);
+                // TODO fire a signal 'token received'
             }
         }
     }
@@ -147,20 +148,38 @@ mod tests {
     use std::sync::Arc;
     use std::sync::RwLock;
 
+    #[derive(Clone)]
+    struct MocketWrapper {
+        sync_sender: Option<SyncSender<String>>,
+    }
+
+    impl MocketWrapper {
+        fn new() -> Self {
+            MocketWrapper { sync_sender: None }
+        }
+    }
+
+    impl WebServer for MocketWrapper {
+        fn manage(mut self, state: SyncSender<String>) -> Self {
+            self.sync_sender = Some(state);
+            self
+        }
+
+        fn launch(self) {
+            self.sync_sender
+                .map(|sender| sender.send("token".to_string()));
+        }
+    }
+
     #[test]
-    fn test_spawns_webserver_on_start() -> std::io::Result<()> {
+    fn test_launches_webserver_on_start() {
         let server = OAuthServer::new();
-        let _tokench = server.start(RocketWrapper {
-            rocket: rocket(8080),
-        });
+        let mock_server = MocketWrapper::new();
 
-        let res = ureq::get(
-            "http://127.0.0.1:8080/capture/#access_token=token&token_type=Bearer&state=100",
-        )
-        .call();
+        let receiver = server.start(mock_server.clone());
+        let token = receiver.recv_timeout(std::time::Duration::from_millis(10));
 
-        assert_eq!(200, res.status());
-        Ok(())
+        assert_eq!("token".to_string(), token.unwrap());
     }
 
     #[test]
