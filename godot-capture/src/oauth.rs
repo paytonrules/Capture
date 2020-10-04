@@ -120,6 +120,8 @@ mod tests {
     use super::*;
     use rocket::http::{ContentType, Status};
     use rocket::local::Client;
+    use std::sync::Arc;
+    use std::sync::RwLock;
 
     #[test]
     fn test_spawns_webserver_on_start() -> std::io::Result<()> {
@@ -133,6 +135,20 @@ mod tests {
 
         assert_eq!(200, res.status());
         Ok(())
+    }
+
+    #[test]
+    fn test_payton_understands_arc_and_rwlock() {
+        let first = Arc::new(RwLock::new(1));
+        let second = first.clone();
+
+        let join_handle = thread::spawn(move || {
+            let mut thing = second.write().unwrap();
+            *thing = 2;
+        });
+        join_handle.join();
+
+        assert_eq!(*first.read().unwrap(), 2);
     }
 
     #[test]
