@@ -64,6 +64,26 @@ fn rocket(port: u16) -> rocket::Rocket {
     rocket::custom(config).mount("/", routes![capture, save_token])
 }
 
+trait WebServer {
+    fn manage<T: Send + Sync + 'static>(self, state: T) -> Self;
+    fn launch(self) -> rocket::error::LaunchError;
+}
+
+struct RocketWrapper {
+    rocket: rocket::Rocket,
+}
+
+impl WebServer for RocketWrapper {
+    fn manage<T: Send + Sync + 'static>(self, state: T) -> Self {
+        RocketWrapper {
+            rocket: self.rocket.manage(state),
+        }
+    }
+    fn launch(self) -> rocket::error::LaunchError {
+        self.rocket.launch()
+    }
+}
+
 // TODO rename (OauthProvider? Something that's less "serverish")
 struct OAuthServer;
 
@@ -72,10 +92,12 @@ impl OAuthServer {
         OAuthServer
     }
 
-    fn start(&self, server: rocket::Rocket) -> Receiver<String> {
+    fn start(&self, server: RocketWrapper) -> Receiver<String> {
         let (send, recv) = sync_channel(1);
 
         let server = server.manage(send);
+
+        // Give it a port
 
         thread::spawn(move || {
             server.launch();
@@ -101,7 +123,9 @@ impl Listener {
     #[export]
     fn _ready(&mut self, _owner: TRef<Node>) {
         let server = OAuthServer::new();
-        let rocket = rocket(8080);
+        let rocket = RocketWrapper {
+            rocket: rocket(8080),
+        };
         self.token_receiver = Some(server.start(rocket));
     }
 
@@ -126,7 +150,9 @@ mod tests {
     #[test]
     fn test_spawns_webserver_on_start() -> std::io::Result<()> {
         let server = OAuthServer::new();
-        let _tokench = server.start(rocket(8080));
+        let _tokench = server.start(RocketWrapper {
+            rocket: rocket(8080),
+        });
 
         let res = ureq::get(
             "http://127.0.0.1:8080/capture/#access_token=token&token_type=Bearer&state=100",
