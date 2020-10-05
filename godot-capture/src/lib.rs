@@ -7,7 +7,6 @@ mod oauth;
 use capture_note::Remember;
 use gdnative::prelude::*;
 use login::Login;
-use oauth::Listener;
 
 #[macro_use]
 extern crate rocket;
@@ -15,7 +14,7 @@ extern crate rocket;
 fn init(handle: InitHandle) {
     handle.add_class::<Login>();
     handle.add_class::<Remember>();
-    handle.add_class::<Listener>();
+    handle.add_class::<oauth::Listener>();
 }
 
 godot_init!(init);
