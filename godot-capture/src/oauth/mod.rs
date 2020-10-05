@@ -81,10 +81,6 @@ impl Listener {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rocket::http::{ContentType, Status};
-    use rocket::local::Client;
-    use std::sync::Arc;
-    use std::sync::RwLock;
 
     #[derive(Clone)]
     struct MocketWrapper {
@@ -118,60 +114,5 @@ mod tests {
         let token = receiver.recv_timeout(std::time::Duration::from_millis(10));
 
         assert_eq!("token".to_string(), token.unwrap());
-    }
-
-    #[test]
-    fn test_payton_understands_arc_and_rwlock() {
-        let first = Arc::new(RwLock::new(1));
-        let second = first.clone();
-
-        let join_handle = thread::spawn(move || {
-            let mut thing = second.write().unwrap();
-            *thing = 2;
-        });
-        join_handle.join();
-
-        assert_eq!(*first.read().unwrap(), 2);
-    }
-
-    #[test]
-    fn rocket_constructor_uses_passed_in_port() {
-        let rocket = rocket(8000);
-
-        assert_eq!(8000, rocket.config().port);
-    }
-
-    #[test]
-    fn capture_renders_a_simple_web_page() -> Result<(), Box<dyn std::error::Error>> {
-        let client = Client::new(rocket(8080))?;
-
-        let mut response = client.get("/capture").dispatch();
-
-        assert_eq!(response.status(), Status::Ok);
-        assert_eq!(response.content_type(), Some(ContentType::HTML));
-        assert!(response
-            .body_string()
-            .ok_or("Error getting html body")?
-            .contains("Login Successful"));
-
-        Ok(())
-    }
-
-    #[test]
-    fn posting_to_save_token_sends_the_token_to_the_channel(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let (send, recv) = sync_channel(1);
-        let rocket = rocket(8080).manage(send);
-        let client = Client::new(rocket)?;
-
-        let response = client
-            .post("/save_token")
-            .body("access_token=token&state=ignore&token_type=ignore")
-            .header(ContentType::Form)
-            .dispatch();
-
-        assert_eq!(Ok("token".to_string()), recv.recv());
-        assert_eq!(Status::Ok, response.status());
-        Ok(())
     }
 }
