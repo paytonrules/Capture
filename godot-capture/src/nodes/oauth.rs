@@ -1,19 +1,12 @@
-use crate::oauth::{login_site, OAuthProvider, PortProvider, RocketWebServer};
+use crate::oauth::{login_site, OAuthProvider, RocketWebServer};
 use gdnative::prelude::*;
+use port_check;
 use std::sync::mpsc::Receiver;
 
 #[derive(NativeClass)]
 #[inherit(Node)]
 pub struct OAuthValidation {
     token_receiver: Option<Receiver<String>>,
-}
-
-struct DummyPortProvider;
-
-impl PortProvider for DummyPortProvider {
-    fn provide(self) -> u16 {
-        8080
-    }
 }
 
 #[methods]
@@ -27,10 +20,10 @@ impl OAuthValidation {
     #[export]
     fn _ready(&mut self, _owner: TRef<Node>) {
         let provider = OAuthProvider::new();
-        let rocket = RocketWebServer {
-            rocket: login_site::rocket(8080),
-        };
-        self.token_receiver = Some(provider.provide(rocket));
+        let port = port_check::free_local_port();
+        godot_print!("Port is now {:?}", port);
+        let rocket = RocketWebServer::builder().port(port).build();
+        self.token_receiver = Some(provider.provide(rocket.unwrap()));
     }
 
     #[export]

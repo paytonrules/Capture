@@ -1,5 +1,6 @@
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::thread;
+use thiserror::Error;
 pub mod login_site;
 
 pub trait WebServer {
@@ -7,8 +8,43 @@ pub trait WebServer {
     fn launch(self);
 }
 
+#[derive(Debug, PartialEq, Error)]
+pub enum BuildError {
+    #[error("No port was available to the builder, or the provided port was `None`")]
+    NoPortProvided,
+}
+
+pub struct RocketWebServerBuilder {
+    port: Option<u16>,
+}
+
+impl RocketWebServerBuilder {
+    pub fn port(mut self, port: Option<u16>) -> Self {
+        self.port = port;
+        self
+    }
+
+    pub fn build(self) -> Result<RocketWebServer, BuildError> {
+        self.port
+            .map(|port| RocketWebServer {
+                rocket: login_site::rocket(port),
+            })
+            .ok_or(BuildError::NoPortProvided)
+    }
+}
+
 pub struct RocketWebServer {
     pub rocket: rocket::Rocket,
+}
+
+impl RocketWebServer {
+    pub fn builder() -> RocketWebServerBuilder {
+        RocketWebServerBuilder { port: None }
+    }
+
+    pub fn port(&self) -> u16 {
+        self.rocket.config().port
+    }
 }
 
 impl WebServer for RocketWebServer {
@@ -20,10 +56,6 @@ impl WebServer for RocketWebServer {
     fn launch(self) {
         self.rocket.launch();
     }
-}
-
-pub trait PortProvider {
-    fn provide(self) -> u16;
 }
 
 pub struct OAuthProvider;
@@ -74,22 +106,6 @@ mod tests {
         }
     }
 
-    struct StubbedPortProvider {
-        port: u16,
-    }
-
-    impl StubbedPortProvider {
-        fn new(port: u16) -> Self {
-            StubbedPortProvider { port }
-        }
-    }
-
-    impl PortProvider for StubbedPortProvider {
-        fn provide(self) -> u16 {
-            self.port
-        }
-    }
-
     #[test]
     fn launches_provider_on_start() {
         let server = OAuthProvider::new();
@@ -99,5 +115,24 @@ mod tests {
         let token = receiver.recv_timeout(std::time::Duration::from_millis(10));
 
         assert_eq!("token".to_string(), token.unwrap());
+    }
+
+    #[test]
+    fn build_rocket_webserver_with_port_provider() -> Result<(), BuildError> {
+        let wrapper = RocketWebServer::builder().port(Some(9001)).build()?;
+
+        assert_eq!(9001, wrapper.port());
+        Ok(())
+    }
+
+    #[test]
+    fn fail_to_build_without_a_port() {
+        let wrapper = RocketWebServer::builder().build();
+
+        if let Err(error) = wrapper {
+            assert_eq!(BuildError::NoPortProvided, error);
+        } else {
+            assert!(false, "Did not return an error as expected");
+        }
     }
 }
