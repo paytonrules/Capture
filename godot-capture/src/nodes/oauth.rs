@@ -4,14 +4,14 @@ use std::sync::mpsc::Receiver;
 
 #[derive(NativeClass)]
 #[inherit(Node)]
-pub struct Listener {
+pub struct OAuthValidation {
     token_receiver: Option<Receiver<String>>,
 }
 
 #[methods]
-impl Listener {
+impl OAuthValidation {
     fn new(_owner: &Node) -> Self {
-        Listener {
+        OAuthValidation {
             token_receiver: None,
         }
     }
