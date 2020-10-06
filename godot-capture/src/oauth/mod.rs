@@ -1,15 +1,14 @@
-use gdnative::prelude::*;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::thread;
-mod login_site;
+pub mod login_site;
 
-trait WebServer {
+pub trait WebServer {
     fn manage(self, state: SyncSender<String>) -> Self;
     fn launch(self);
 }
 
-struct RocketWrapper {
-    rocket: rocket::Rocket,
+pub struct RocketWrapper {
+    pub rocket: rocket::Rocket,
 }
 
 impl WebServer for RocketWrapper {
@@ -24,14 +23,14 @@ impl WebServer for RocketWrapper {
 }
 
 // TODO rename (OauthProvider? Something that's less "serverish")
-struct OAuthServer;
+pub struct OAuthServer;
 
 impl OAuthServer {
-    fn new() -> Self {
+    pub fn new() -> Self {
         OAuthServer
     }
 
-    fn start<T: WebServer + Send + Sync + 'static>(&self, server: T) -> Receiver<String> {
+    pub fn start<T: WebServer + Send + Sync + 'static>(&self, server: T) -> Receiver<String> {
         let (send, recv) = sync_channel(1);
 
         let server = server.manage(send);
@@ -42,39 +41,6 @@ impl OAuthServer {
             server.launch();
         });
         recv
-    }
-}
-
-#[derive(NativeClass)]
-#[inherit(Node)]
-pub struct Listener {
-    token_receiver: Option<Receiver<String>>,
-}
-
-#[methods]
-impl Listener {
-    fn new(_owner: &Node) -> Self {
-        Listener {
-            token_receiver: None,
-        }
-    }
-
-    #[export]
-    fn _ready(&mut self, _owner: TRef<Node>) {
-        let server = OAuthServer::new();
-        let rocket = RocketWrapper {
-            rocket: login_site::rocket(8080),
-        };
-        self.token_receiver = Some(server.start(rocket));
-    }
-
-    #[export]
-    fn _process(&self, _owner: TRef<Node>, _delta: f64) {
-        if let Some(token_receiver) = &self.token_receiver {
-            if let Ok(_token) = token_receiver.try_recv() {
-                godot_print!("token came back! (but lets not print it)");
-            }
-        }
     }
 }
 

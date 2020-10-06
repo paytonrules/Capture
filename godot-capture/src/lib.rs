@@ -1,12 +1,12 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
-mod capture_note;
-mod login;
+mod nodes;
 mod oauth;
 
-use capture_note::Remember;
 use gdnative::prelude::*;
-use login::Login;
+use nodes::capture_note::Remember;
+use nodes::listener::Listener;
+use nodes::login::Login;
 
 #[macro_use]
 extern crate rocket;
@@ -14,7 +14,7 @@ extern crate rocket;
 fn init(handle: InitHandle) {
     handle.add_class::<Login>();
     handle.add_class::<Remember>();
-    handle.add_class::<oauth::Listener>();
+    handle.add_class::<Listener>();
 }
 
 godot_init!(init);
