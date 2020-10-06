@@ -3,18 +3,18 @@ use std::thread;
 pub mod login_site;
 
 pub trait WebServer {
-    fn manage(self, state: SyncSender<String>) -> Self;
+    fn token_sender(self, sender: SyncSender<String>) -> Self;
     fn launch(self);
 }
 
-pub struct RocketWrapper {
+pub struct RocketWebServer {
     pub rocket: rocket::Rocket,
 }
 
-impl WebServer for RocketWrapper {
-    fn manage(self, state: SyncSender<String>) -> Self {
-        RocketWrapper {
-            rocket: self.rocket.manage(state),
+impl WebServer for RocketWebServer {
+    fn token_sender(self, sender: SyncSender<String>) -> Self {
+        RocketWebServer {
+            rocket: self.rocket.manage(sender),
         }
     }
     fn launch(self) {
@@ -22,18 +22,21 @@ impl WebServer for RocketWrapper {
     }
 }
 
-// TODO rename (OauthProvider? Something that's less "serverish")
-pub struct OAuthServer;
+pub trait PortProvider {
+    fn provide(self) -> u16;
+}
 
-impl OAuthServer {
+pub struct OAuthProvider;
+
+impl OAuthProvider {
     pub fn new() -> Self {
-        OAuthServer
+        OAuthProvider
     }
 
-    pub fn start<T: WebServer + Send + Sync + 'static>(&self, server: T) -> Receiver<String> {
+    pub fn provide<T: WebServer + Send + Sync + 'static>(&self, server: T) -> Receiver<String> {
         let (send, recv) = sync_channel(1);
 
-        let server = server.manage(send);
+        let server = server.token_sender(send);
 
         // Give it a port
 
@@ -60,8 +63,8 @@ mod tests {
     }
 
     impl WebServer for MocketWrapper {
-        fn manage(mut self, state: SyncSender<String>) -> Self {
-            self.sync_sender = Some(state);
+        fn token_sender(mut self, sender: SyncSender<String>) -> Self {
+            self.sync_sender = Some(sender);
             self
         }
 
@@ -71,12 +74,28 @@ mod tests {
         }
     }
 
+    struct StubbedPortProvider {
+        port: u16,
+    }
+
+    impl StubbedPortProvider {
+        fn new(port: u16) -> Self {
+            StubbedPortProvider { port }
+        }
+    }
+
+    impl PortProvider for StubbedPortProvider {
+        fn provide(self) -> u16 {
+            self.port
+        }
+    }
+
     #[test]
-    fn test_launches_webserver_on_start() {
-        let server = OAuthServer::new();
+    fn launches_provider_on_start() {
+        let server = OAuthProvider::new();
         let mock_server = MocketWrapper::new();
 
-        let receiver = server.start(mock_server.clone());
+        let receiver = server.provide(mock_server.clone());
         let token = receiver.recv_timeout(std::time::Duration::from_millis(10));
 
         assert_eq!("token".to_string(), token.unwrap());
