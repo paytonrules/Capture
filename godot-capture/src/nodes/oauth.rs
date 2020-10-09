@@ -1,4 +1,4 @@
-use crate::oauth::{login_site, OAuthProvider, RocketWebServer};
+use crate::oauth::{OAuthProvider, RocketWebServer};
 use gdnative::prelude::*;
 use port_check;
 use std::sync::mpsc::Receiver;
@@ -21,9 +21,10 @@ impl OAuthValidation {
     fn _ready(&mut self, _owner: TRef<Node>) {
         let provider = OAuthProvider::new();
         let port = port_check::free_local_port();
-        godot_print!("Port is now {:?}", port);
-        let rocket = RocketWebServer::builder().port(port).build();
-        self.token_receiver = Some(provider.provide(rocket.unwrap()));
+        match RocketWebServer::builder().port(port).build() {
+            Ok(rocket) => self.token_receiver = Some(provider.provide(rocket)),
+            Err(err) => godot_print!("Error {:?} building rocket", err),
+        };
     }
 
     #[export]
