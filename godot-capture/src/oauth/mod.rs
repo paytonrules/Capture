@@ -41,10 +41,6 @@ impl RocketWebServer {
     pub fn builder() -> RocketWebServerBuilder {
         RocketWebServerBuilder { port: None }
     }
-
-    pub fn port(&self) -> u16 {
-        self.rocket.config().port
-    }
 }
 
 impl WebServer for RocketWebServer {
@@ -103,6 +99,12 @@ mod tests {
         fn launch(self) {
             self.sync_sender
                 .map(|sender| sender.send("token".to_string()));
+        }
+    }
+
+    impl RocketWebServer {
+        pub fn port(&self) -> u16 {
+            self.rocket.config().port
         }
     }
 
