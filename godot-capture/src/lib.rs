@@ -2,6 +2,7 @@
 
 mod nodes;
 mod oauth;
+mod todo;
 
 use gdnative::prelude::*;
 use nodes::capture_note::Remember;
