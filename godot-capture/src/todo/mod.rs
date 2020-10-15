@@ -13,6 +13,7 @@ struct Todo<'a, T: Storage> {
 
 trait Storage {
     fn update(&self, inbox: &String) -> Result<(), Box<dyn std::error::Error>>;
+    fn load(&self) -> Result<String, Box<dyn std::error::Error>>;
 }
 
 impl<'a, T> Todo<'a, T>
@@ -24,6 +25,11 @@ where
             storage,
             inbox: "".to_string(),
         }
+    }
+
+    fn load(storage: &'a T) -> Result<Self, TodoError> {
+        let inbox = storage.load().expect("doomed");
+        Ok(Todo { storage, inbox })
     }
 
     fn save(&mut self, note: &String) -> Result<(), TodoError> {
@@ -46,24 +52,28 @@ mod tests {
     }
 
     struct MockStorage {
-        updated_with: RefCell<String>,
+        inbox: RefCell<String>,
         update_error: Option<String>,
     }
 
     impl MockStorage {
         fn new() -> Self {
             MockStorage {
-                updated_with: RefCell::new("".to_string()),
+                inbox: RefCell::new("".to_string()),
                 update_error: None,
             }
         }
 
-        fn updated_with(&self, full_update: &String) -> bool {
-            self.updated_with.borrow().eq(full_update)
+        fn inbox(&self) -> String {
+            self.inbox.borrow().to_string()
         }
 
         fn set_update_to_error(&mut self, error: &str) {
             self.update_error = Some(error.to_string());
+        }
+
+        fn set_inbox(&mut self, inbox: &str) {
+            *self.inbox.borrow_mut() = inbox.to_string();
         }
     }
 
@@ -74,9 +84,13 @@ mod tests {
                     update_error.to_string(),
                 )))
             } else {
-                *self.updated_with.borrow_mut() = inbox.to_string();
+                *self.inbox.borrow_mut() = inbox.to_string();
                 Ok(())
             }
+        }
+
+        fn load(&self) -> Result<String, Box<dyn std::error::Error>> {
+            Ok(self.inbox.borrow().to_string())
         }
     }
 
@@ -87,7 +101,7 @@ mod tests {
 
         todo.save(&"note".to_string())?;
 
-        assert!(storage.updated_with(&"\n- note".to_string()));
+        assert_eq!("\n- note".to_string(), storage.inbox());
         Ok(())
     }
 
@@ -99,7 +113,7 @@ mod tests {
         todo.save(&"note 1".to_string())?;
         todo.save(&"note 2".to_string())?;
 
-        assert!(storage.updated_with(&"\n- note 1\n- note 2".to_string()));
+        assert_eq!("\n- note 1\n- note 2".to_string(), storage.inbox());
         Ok(())
     }
 
@@ -112,5 +126,18 @@ mod tests {
         let result = todo.save(&"whatever you do, don't forget".to_string());
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn when_todo_is_loaded_get_inbox_from_storage() -> Result<(), TodoError> {
+        let mut storage = MockStorage::new();
+        storage.set_inbox("\n- First todo");
+
+        let mut todo = Todo::load(&storage)?;
+        todo.save(&"second todo".to_string())?;
+
+        assert_eq!("\n- First todo\n- second todo", storage.inbox());
+
+        Ok(())
     }
 }
