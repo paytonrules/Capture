@@ -1,9 +1,12 @@
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, Error)]
 pub enum TodoError {
     #[error("Unable to save todo item {0}")]
     CouldNotSaveTodo(String),
+
+    #[error("Error loading inbox")]
+    FailedToLoad(#[from] Box<dyn std::error::Error>),
 }
 
 struct Todo<'a, T: Storage> {
@@ -28,7 +31,7 @@ where
     }
 
     fn load(storage: &'a T) -> Result<Self, TodoError> {
-        let inbox = storage.load().expect("doomed");
+        let inbox = storage.load().map_err(|err| TodoError::FailedToLoad(err))?;
         Ok(Todo { storage, inbox })
     }
 
@@ -51,9 +54,16 @@ mod tests {
         CantSave(String),
     }
 
+    #[derive(Debug, Clone, Copy, Error)]
+    pub enum MockError {
+        #[error("Failed To Load")]
+        TestFailedToLoad,
+    }
+
     struct MockStorage {
         inbox: RefCell<String>,
         update_error: Option<String>,
+        load_error: Option<MockError>,
     }
 
     impl MockStorage {
@@ -61,6 +71,7 @@ mod tests {
             MockStorage {
                 inbox: RefCell::new("".to_string()),
                 update_error: None,
+                load_error: None,
             }
         }
 
@@ -74,6 +85,10 @@ mod tests {
 
         fn set_inbox(&mut self, inbox: &str) {
             *self.inbox.borrow_mut() = inbox.to_string();
+        }
+
+        fn set_load_error(&mut self, error: MockError) {
+            self.load_error = Some(error);
         }
     }
 
@@ -90,7 +105,10 @@ mod tests {
         }
 
         fn load(&self) -> Result<String, Box<dyn std::error::Error>> {
-            Ok(self.inbox.borrow().to_string())
+            match &self.load_error {
+                None => Ok(self.inbox.borrow().to_string()),
+                Some(err) => Err(Box::new(*err)),
+            }
         }
     }
 
@@ -139,5 +157,17 @@ mod tests {
         assert_eq!("\n- First todo\n- second todo", storage.inbox());
 
         Ok(())
+    }
+
+    #[test]
+    fn when_todo_list_cant_be_loaded_return_that_result() {
+        let mut storage = MockStorage::new();
+        storage.set_load_error(MockError::TestFailedToLoad);
+
+        let todo = Todo::load(&storage);
+        match todo {
+            Ok(_) => assert!(false, "Test Failed: Expected load to fail, it succeeded"),
+            Err(err) => assert_eq!("FailedToLoad(TestFailedToLoad)", format!("{:?}", err)),
+        }
     }
 }
