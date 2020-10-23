@@ -1,4 +1,40 @@
 use thiserror::Error;
+use ureq::json;
+
+pub trait Storage {
+    fn update(&self, inbox: &String) -> Result<(), Box<dyn std::error::Error>>;
+    fn load(&self) -> Result<String, Box<dyn std::error::Error>>;
+}
+
+pub struct GitlabStorage {
+    token: String,
+}
+
+impl GitlabStorage {
+    pub fn new(token: String) -> Self {
+        GitlabStorage { token }
+    }
+}
+
+impl Storage for GitlabStorage {
+    fn update(&self, inbox: &String) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
+    fn load(&self) -> Result<String, Box<dyn std::error::Error>> {
+        //GET https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg?ref=master
+        //Authorization: Bearer fFsGsR7Mf6TfCoks2-_r
+        let resp = ureq::get("https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg?ref=master")
+            .set("Authorization", &format!("Bearer {}", self.token))
+            .call();
+
+        if resp.error() {
+            Ok(format!("error: {}", resp.status_text()).to_string())
+        } else {
+            Ok("not an error".to_string())
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum TodoError {
@@ -11,7 +47,7 @@ pub enum TodoError {
 
 pub struct Todo<T: Storage> {
     storage: T,
-    inbox: String,
+    pub inbox: String,
 }
 
 impl<T> Todo<T>
@@ -25,12 +61,12 @@ where
         }
     }
 
-    fn load(storage: T) -> Result<Self, TodoError> {
+    pub fn load(storage: T) -> Result<Self, TodoError> {
         let inbox = storage.load().map_err(|err| TodoError::FailedToLoad(err))?;
         Ok(Todo { storage, inbox })
     }
 
-    fn save(&mut self, note: &String) -> Result<(), TodoError> {
+    pub fn save(&mut self, note: &String) -> Result<(), TodoError> {
         self.inbox.push_str(format!("\n- {}", note).as_str());
         self.storage
             .update(&self.inbox)
