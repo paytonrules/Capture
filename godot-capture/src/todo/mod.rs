@@ -1,9 +1,10 @@
+use anyhow::bail;
 use thiserror::Error;
 use ureq::json;
 
 pub trait Storage {
-    fn update(&self, inbox: &String) -> Result<(), Box<dyn std::error::Error>>;
-    fn load(&self) -> Result<String, Box<dyn std::error::Error>>;
+    fn update(&self, inbox: &String) -> anyhow::Result<()>;
+    fn load(&self) -> anyhow::Result<String>;
 }
 
 pub struct GitlabStorage {
@@ -17,21 +18,21 @@ impl GitlabStorage {
 }
 
 impl Storage for GitlabStorage {
-    fn update(&self, inbox: &String) -> Result<(), Box<dyn std::error::Error>> {
+    fn update(&self, inbox: &String) -> anyhow::Result<()> {
         Ok(())
     }
 
-    fn load(&self) -> Result<String, Box<dyn std::error::Error>> {
+    fn load(&self) -> anyhow::Result<String> {
         //GET https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg?ref=master
         //Authorization: Bearer fFsGsR7Mf6TfCoks2-_r
         let resp = ureq::get("https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg?ref=master")
             .set("Authorization", &format!("Bearer {}", self.token))
             .call();
 
-        if resp.error() {
-            Ok(format!("error: {}", resp.status_text()).to_string())
+        if let Some(error) = resp.synthetic_error() {
+            bail!("Response error {}", error)
         } else {
-            Ok("not an error".to_string())
+            Ok(resp.into_string().unwrap())
         }
     }
 }
@@ -42,7 +43,7 @@ pub enum TodoError {
     CouldNotSaveTodo(String),
 
     #[error("Error loading inbox")]
-    FailedToLoad(#[from] Box<dyn std::error::Error>),
+    FailedToLoad(#[from] anyhow::Error),
 }
 
 pub struct Todo<T: Storage> {
@@ -88,7 +89,7 @@ mod tests {
 
     #[derive(Debug, Clone, Copy, Error)]
     pub enum MockError {
-        #[error("Failed To Load")]
+        #[error("Test Failed To Load")]
         TestFailedToLoad,
     }
 
@@ -116,7 +117,7 @@ mod tests {
             self
         }
 
-        fn with_inbox(mut self, inbox: &str) -> Self {
+        fn with_inbox(self, inbox: &str) -> Self {
             *self.inbox.borrow_mut() = inbox.to_string();
             self
         }
@@ -132,21 +133,22 @@ mod tests {
     }
 
     impl Storage for Rc<MockStorage> {
-        fn update(&self, inbox: &String) -> Result<(), Box<dyn std::error::Error>> {
-            if let Some(update_error) = &self.update_error {
-                Err(Box::new(MockStorageError::CantSave(
-                    update_error.to_string(),
-                )))
-            } else {
-                *self.inbox.borrow_mut() = inbox.to_string();
-                Ok(())
+        fn update(&self, inbox: &String) -> anyhow::Result<()> {
+            match &self.update_error {
+                None => {
+                    *self.inbox.borrow_mut() = inbox.to_string();
+                    Ok(())
+                }
+                Some(update_error) => {
+                    Err(MockStorageError::CantSave(update_error.to_string()).into())
+                }
             }
         }
 
-        fn load(&self) -> Result<String, Box<dyn std::error::Error>> {
+        fn load(&self) -> anyhow::Result<String> {
             match &self.load_error {
                 None => Ok(self.inbox.borrow().to_string()),
-                Some(err) => Err(Box::new(*err)),
+                Some(err) => Err(err.clone().into()),
             }
         }
     }
@@ -206,7 +208,7 @@ mod tests {
         let todo = Todo::load(Rc::clone(&storage));
         match todo {
             Ok(_) => assert!(false, "Test Failed: Expected load to fail, it succeeded"),
-            Err(err) => assert_eq!("FailedToLoad(TestFailedToLoad)", format!("{:?}", err)),
+            Err(err) => assert_eq!("FailedToLoad(Test Failed To Load)", format!("{:?}", err)),
         }
     }
 }
