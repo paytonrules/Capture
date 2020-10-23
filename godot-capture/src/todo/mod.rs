@@ -75,16 +75,23 @@ mod tests {
             self.inbox.borrow().to_string()
         }
 
-        fn set_update_to_error(&mut self, error: &str) {
+        fn with_update_error(mut self, error: &str) -> Self {
             self.update_error = Some(error.to_string());
+            self
         }
 
-        fn set_inbox(&mut self, inbox: &str) {
+        fn with_inbox(mut self, inbox: &str) -> Self {
             *self.inbox.borrow_mut() = inbox.to_string();
+            self
         }
 
-        fn set_load_error(&mut self, error: MockError) {
+        fn with_load_error(mut self, error: MockError) -> Self {
             self.load_error = Some(error);
+            self
+        }
+
+        fn as_rc(self) -> Rc<Self> {
+            Rc::new(self)
         }
     }
 
@@ -109,7 +116,7 @@ mod tests {
     }
     #[test]
     fn save_note_appends_to_empty_todo_list() -> Result<(), TodoError> {
-        let storage = Rc::new(MockStorage::new());
+        let storage = MockStorage::new().as_rc();
         let mut todo = Todo::new(Rc::clone(&storage));
 
         todo.save(&"note".to_string())?;
@@ -120,7 +127,7 @@ mod tests {
 
     #[test]
     fn save_note_adds_a_newline_between_notes() -> Result<(), TodoError> {
-        let storage = Rc::new(MockStorage::new());
+        let storage = MockStorage::new().as_rc();
         let mut todo = Todo::new(Rc::clone(&storage));
 
         todo.save(&"note 1".to_string())?;
@@ -132,9 +139,9 @@ mod tests {
 
     #[test]
     fn when_storage_update_fails_pass_along_error() {
-        let mut storage = MockStorage::new();
-        storage.set_update_to_error("commit failed");
-        let storage = Rc::new(storage);
+        let storage = MockStorage::new()
+            .with_update_error("commit failed")
+            .as_rc();
         let mut todo = Todo::new(Rc::clone(&storage));
 
         let result = todo.save(&"whatever you do, don't forget".to_string());
@@ -144,9 +151,7 @@ mod tests {
 
     #[test]
     fn when_todo_is_loaded_get_inbox_from_storage() -> Result<(), TodoError> {
-        let mut storage = MockStorage::new();
-        storage.set_inbox("\n- First todo");
-        let storage = Rc::new(storage);
+        let storage = MockStorage::new().with_inbox("\n- First todo").as_rc();
 
         let mut todo = Todo::load(Rc::clone(&storage))?;
         todo.save(&"second todo".to_string())?;
@@ -158,9 +163,9 @@ mod tests {
 
     #[test]
     fn when_todo_list_cant_be_loaded_return_that_result() {
-        let mut storage = MockStorage::new();
-        storage.set_load_error(MockError::TestFailedToLoad);
-        let storage = Rc::new(storage);
+        let storage = MockStorage::new()
+            .with_load_error(MockError::TestFailedToLoad)
+            .as_rc();
 
         let todo = Todo::load(Rc::clone(&storage));
         match todo {
