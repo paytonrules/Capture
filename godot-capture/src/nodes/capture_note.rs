@@ -1,8 +1,10 @@
+use crate::todo::TodoError;
 use crate::todo::{GitlabStorage, Todo};
 use gdnative::api::TextureButton;
 use gdnative::prelude::*;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
+use thiserror::Error;
 
 lazy_static! {
     static ref TOKEN: Mutex<Option<String>> = Mutex::new(None);
@@ -10,6 +12,18 @@ lazy_static! {
 
 pub fn save_token(token: String) {
     *TOKEN.lock().unwrap() = Some(token);
+}
+
+#[derive(Debug, Error)]
+pub enum CaptureError {
+    #[error("Unable to get token lock {0}")]
+    FailedToLockToken(String),
+
+    #[error("No token present")]
+    NoTokenPresent,
+
+    #[error("Error getting todo list: {0}")]
+    ErrorGettingTodoList(#[from] TodoError),
 }
 
 #[derive(NativeClass)]
@@ -26,17 +40,20 @@ impl Remember {
 
     #[export]
     fn _ready(&mut self, _owner: TRef<TextureButton>) {
-        self.todo = self.load_todos().ok();
+        match self.load_todos() {
+            Ok(todos) => self.todo = Some(todos),
+            Err(err) => godot_error!("Error! {:?}", err),
+        }
     }
 
-    fn load_todos(&self) -> Result<Todo<GitlabStorage>, crate::todo::TodoError> {
+    fn load_todos(&self) -> Result<Todo<GitlabStorage>, CaptureError> {
         let token = TOKEN
             .try_lock()
-            .map_err(|err| crate::todo::TodoError::CouldNotSaveTodo("doom".to_string()))?
+            .map_err(|err| CaptureError::FailedToLockToken(err.to_string()))?
             .clone();
 
-        let token = token.ok_or(crate::todo::TodoError::CouldNotSaveTodo("nope".to_string()))?;
-        Todo::load(GitlabStorage::new(token))
+        let token = token.ok_or(CaptureError::NoTokenPresent)?;
+        Todo::load(GitlabStorage::new(token)).map_err(|err| CaptureError::ErrorGettingTodoList(err))
     }
 
     #[export]
