@@ -11,6 +11,7 @@ thiserror = "1.0"
 anyhow = "1.0.33"
 port_check = "0.1.5"
 ureq = { version = "1.5.1", features = ["json"] }
+lazy_static = "1.4.0"
 
 [lib]
 crate-type = ["cdylib", "staticlib"]

@@ -7,6 +7,7 @@ pub trait Storage {
     fn load(&self) -> anyhow::Result<String>;
 }
 
+#[derive(Debug)]
 pub struct GitlabStorage {
     token: String,
 }
@@ -46,6 +47,7 @@ pub enum TodoError {
     FailedToLoad(#[from] anyhow::Error),
 }
 
+#[derive(Debug)]
 pub struct Todo<T: Storage> {
     storage: T,
     pub inbox: String,

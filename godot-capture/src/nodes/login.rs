@@ -1,3 +1,4 @@
+use crate::nodes::capture_note::save_token;
 use gdnative::api::OS;
 use gdnative::prelude::*;
 
@@ -27,13 +28,13 @@ impl Login {
         }
     }
 
-    //
     #[export]
-    fn _token_received(&self, owner: TRef<Button>, _token: Variant) {
+    fn _token_received(&self, owner: TRef<Button>, token: String) {
         owner
             .get_tree()
             .map(|tree| unsafe { tree.assume_safe() })
             .map(|tree| {
+                save_token(token);
                 tree.change_scene("res://CaptureNote.tscn")
                     .expect("Should change scene");
             });
