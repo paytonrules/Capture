@@ -41,7 +41,10 @@ impl Remember {
     #[export]
     fn _ready(&mut self, _owner: TRef<TextureButton>) {
         match self.load_todos() {
-            Ok(todos) => self.todo = Some(todos),
+            Ok(todos) => {
+                self.todo = Some(todos);
+                godot_print!("todo is {:?}", self.todo);
+            }
             Err(err) => godot_error!("Error! {:?}", err),
         }
     }

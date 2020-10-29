@@ -1,6 +1,8 @@
 use anyhow::bail;
 use thiserror::Error;
-use ureq::json;
+
+mod decoder;
+use decoder::decode_content;
 
 pub trait Storage {
     fn update(&self, inbox: &String) -> anyhow::Result<()>;
@@ -24,8 +26,6 @@ impl Storage for GitlabStorage {
     }
 
     fn load(&self) -> anyhow::Result<String> {
-        //GET https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg?ref=master
-        //Authorization: Bearer fFsGsR7Mf6TfCoks2-_r
         let resp = ureq::get("https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg?ref=master")
             .set("Authorization", &format!("Bearer {}", self.token))
             .call();
@@ -33,7 +33,10 @@ impl Storage for GitlabStorage {
         if let Some(error) = resp.synthetic_error() {
             bail!("Response error {}", error)
         } else {
-            Ok(resp.into_string().unwrap())
+            match decode_content(resp.into_json().unwrap()) {
+                Ok(content) => Ok(content),
+                Err(err) => Err(err.into()),
+            }
         }
     }
 }
@@ -212,5 +215,20 @@ mod tests {
             Ok(_) => assert!(false, "Test Failed: Expected load to fail, it succeeded"),
             Err(err) => assert_eq!("FailedToLoad(Test Failed To Load)", format!("{:?}", err)),
         }
+    }
+
+    use base64::encode;
+    use ureq::{SerdeMap, SerdeValue};
+    #[test]
+    fn can_decode_json_with_base64_content_correctly() -> Result<(), Box<dyn std::error::Error>> {
+        let content = encode(b"my content");
+        let mut valid_response = SerdeMap::new();
+        valid_response.insert("content".to_string(), SerdeValue::String(content));
+        let json_response = SerdeValue::Object(valid_response);
+
+        let decoded_content = decode_content(json_response)?;
+
+        assert_eq!("my content", decoded_content);
+        Ok(())
     }
 }
