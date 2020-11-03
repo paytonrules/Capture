@@ -39,11 +39,22 @@ impl Remember {
     }
 
     #[export]
-    fn _ready(&mut self, _owner: TRef<TextureButton>) {
+    fn _ready(&mut self, owner: &TextureButton) {
         match self.load_todos() {
             Ok(todos) => {
+                let label = owner
+                    .get_tree()
+                    .map(|tree| unsafe { tree.assume_safe() })
+                    .and_then(|tree| tree.root())
+                    .map(|root| unsafe { root.assume_safe() })
+                    .and_then(|root| {
+                        root.get_node("./CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
+                    })
+                    .map(|node| unsafe { node.assume_safe() })
+                    .and_then(|node| node.cast::<Label>())
+                    .unwrap();
+                label.set_text(todos.inbox.clone());
                 self.todo = Some(todos);
-                godot_print!("todo is {:?}", self.todo);
             }
             Err(err) => godot_error!("Error! {:?}", err),
         }
