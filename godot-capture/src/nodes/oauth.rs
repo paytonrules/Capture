@@ -1,4 +1,5 @@
-use crate::oauth::{OAuthProvider, RocketWebServer};
+use crate::oauth::webserver::RocketWebServer;
+use crate::oauth::OAuthProvider;
 use gdnative::prelude::*;
 use port_check;
 use std::sync::mpsc::Receiver;
