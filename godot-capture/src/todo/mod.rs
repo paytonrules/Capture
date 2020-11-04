@@ -1,59 +1,8 @@
-use anyhow::bail;
-use thiserror::Error;
-
 mod decoder;
-use decoder::decode_content;
-use ureq::json;
-
-pub trait Storage {
-    fn update(&self, inbox: &String) -> anyhow::Result<()>;
-    fn load(&self) -> anyhow::Result<String>;
-}
-
-#[derive(Debug)]
-pub struct GitlabStorage {
-    token: String,
-}
-
-impl GitlabStorage {
-    pub fn new(token: String) -> Self {
-        GitlabStorage { token }
-    }
-}
-
-impl Storage for GitlabStorage {
-    fn update(&self, inbox: &String) -> anyhow::Result<()> {
-        let content = json!({
-            "branch": "master",
-            "content": inbox,
-            "commit_message": "Todo added from Capture app"
-        });
-        let response = ureq::put(
-            "https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg",
-        )
-        .set("Authorization", &format!("Bearer {}", self.token))
-        .send_json(content);
-
-        match response.synthetic_error() {
-            None => Ok(()),
-            Some(error) => bail!("Error posting new content {}", error),
-        }
-    }
-
-    fn load(&self) -> anyhow::Result<String> {
-        let resp = ureq::get("https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg?ref=master")
-            .set("Authorization", &format!("Bearer {}", self.token))
-            .call();
-
-        match resp.synthetic_error() {
-            Some(error) => bail!("Response error {}", error),
-            None => match decode_content(resp.into_json().unwrap()) {
-                Ok(content) => Ok(content),
-                Err(err) => Err(err.into()),
-            },
-        }
-    }
-}
+mod storage;
+pub use storage::GitlabStorage;
+use storage::Storage;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum TodoError {
@@ -229,20 +178,5 @@ mod tests {
             Ok(_) => assert!(false, "Test Failed: Expected load to fail, it succeeded"),
             Err(err) => assert_eq!("FailedToLoad(Test Failed To Load)", format!("{:?}", err)),
         }
-    }
-
-    use base64::encode;
-    use ureq::{SerdeMap, SerdeValue};
-    #[test]
-    fn can_decode_json_with_base64_content_correctly() -> Result<(), Box<dyn std::error::Error>> {
-        let content = encode(b"my content");
-        let mut valid_response = SerdeMap::new();
-        valid_response.insert("content".to_string(), SerdeValue::String(content));
-        let json_response = SerdeValue::Object(valid_response);
-
-        let decoded_content = decode_content(json_response)?;
-
-        assert_eq!("my content", decoded_content);
-        Ok(())
     }
 }

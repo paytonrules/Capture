@@ -1,5 +1,4 @@
-use crate::todo::TodoError;
-use crate::todo::{GitlabStorage, Todo};
+use crate::todo::{GitlabStorage, Todo, TodoError};
 use gdnative::api::{TextEdit, TextureButton};
 use gdnative::prelude::*;
 use lazy_static::lazy_static;

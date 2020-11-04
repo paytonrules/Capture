@@ -1,4 +1,4 @@
-use crate::nodes::capture_note::save_token;
+use super::capture_note::save_token;
 use gdnative::api::OS;
 use gdnative::prelude::*;
 

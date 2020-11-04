@@ -1,4 +1,4 @@
-use crate::oauth::login_site;
+use super::login_site;
 use std::sync::mpsc::SyncSender;
 use thiserror::Error;
 
