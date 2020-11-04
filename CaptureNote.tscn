@@ -51,7 +51,7 @@ __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="TextEdit" type="TextEdit" parent="CenterContainer/VBoxContainer"]
+[node name="New Todo" type="TextEdit" parent="CenterContainer/VBoxContainer"]
 margin_top = 97.0
 margin_right = 321.0
 margin_bottom = 337.0

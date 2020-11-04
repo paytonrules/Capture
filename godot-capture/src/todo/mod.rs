@@ -3,6 +3,7 @@ use thiserror::Error;
 
 mod decoder;
 use decoder::decode_content;
+use ureq::json;
 
 pub trait Storage {
     fn update(&self, inbox: &String) -> anyhow::Result<()>;
@@ -22,7 +23,21 @@ impl GitlabStorage {
 
 impl Storage for GitlabStorage {
     fn update(&self, inbox: &String) -> anyhow::Result<()> {
-        Ok(())
+        let content = json!({
+            "branch": "master",
+            "content": inbox,
+            "commit_message": "Todo added from Capture app"
+        });
+        let response = ureq::put(
+            "https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg",
+        )
+        .set("Authorization", &format!("Bearer {}", self.token))
+        .send_json(content);
+
+        match response.synthetic_error() {
+            None => Ok(()),
+            Some(error) => bail!("Error posting new content {}", error),
+        }
     }
 
     fn load(&self) -> anyhow::Result<String> {
@@ -30,13 +45,12 @@ impl Storage for GitlabStorage {
             .set("Authorization", &format!("Bearer {}", self.token))
             .call();
 
-        if let Some(error) = resp.synthetic_error() {
-            bail!("Response error {}", error)
-        } else {
-            match decode_content(resp.into_json().unwrap()) {
+        match resp.synthetic_error() {
+            Some(error) => bail!("Response error {}", error),
+            None => match decode_content(resp.into_json().unwrap()) {
                 Ok(content) => Ok(content),
                 Err(err) => Err(err.into()),
-            }
+            },
         }
     }
 }

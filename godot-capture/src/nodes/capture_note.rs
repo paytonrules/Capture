@@ -1,6 +1,6 @@
 use crate::todo::TodoError;
 use crate::todo::{GitlabStorage, Todo};
-use gdnative::api::TextureButton;
+use gdnative::api::{TextEdit, TextureButton};
 use gdnative::prelude::*;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
@@ -65,8 +65,16 @@ impl Remember {
     }
 
     #[export]
-    fn _save_me(&mut self, _owner: TRef<TextureButton>) {
-        godot_print!("Save me, SAVE me, SAAAAAAAAVE MEEEEEE");
+    fn _save_me(&mut self, owner: TRef<TextureButton>) {
+        let new_todo = owner
+            .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/New Todo")
+            .map(|node| unsafe { node.assume_safe() })
+            .and_then(|node| node.cast::<TextEdit>())
+            .expect("New Todo node is missing");
+
+        if let Some(todos) = &mut self.todo {
+            todos.save(&new_todo.text().to_string()).expect("Work?");
+        }
     }
 }
 
