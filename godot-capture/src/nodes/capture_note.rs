@@ -73,6 +73,12 @@ impl Remember {
 
         if let Some(todos) = &mut self.todo {
             todos.save(&new_todo.text().to_string()).expect("Work?");
+            let label = owner
+                .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
+                .map(|node| unsafe { node.assume_safe() })
+                .and_then(|node| node.cast::<Label>())
+                .expect("Recent Todos node is missing");
+            label.set_text(get_latest_todos(&todos.inbox));
         }
     }
 }
