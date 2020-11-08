@@ -9,7 +9,7 @@ pub trait Storage {
 
 #[derive(Debug)]
 pub struct GitlabStorage {
-    token: String,
+    pub token: String,
 }
 
 impl GitlabStorage {

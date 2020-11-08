@@ -1,4 +1,4 @@
-use crate::todo::{GitlabStorage, Todo, TodoError};
+use crate::todo::{GitlabStorage, Storage, Todo, TodoError};
 use gdnative::api::{TextEdit, TextureButton};
 use gdnative::prelude::*;
 use lazy_static::lazy_static;
@@ -7,10 +7,6 @@ use thiserror::Error;
 
 lazy_static! {
     static ref TOKEN: Mutex<Option<String>> = Mutex::new(None);
-}
-
-pub fn save_token(token: String) {
-    *TOKEN.lock().unwrap() = Some(token);
 }
 
 #[derive(Debug, Error)]
@@ -39,28 +35,18 @@ impl Remember {
 
     #[export]
     fn _ready(&mut self, owner: TRef<TextureButton>) {
-        match self.load_todos() {
+        match load_todos() {
             Ok(todos) => {
                 let label = owner
                     .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
                     .map(|node| unsafe { node.assume_safe() })
                     .and_then(|node| node.cast::<Label>())
                     .expect("Recent Todos node is missing");
-                label.set_text(get_latest_todos(&todos.inbox));
+                label.set_text(truncate_to_latest_todos(&todos.inbox));
                 self.todo = Some(todos);
             }
             Err(err) => godot_error!("Error! {:?}", err),
         }
-    }
-
-    fn load_todos(&self) -> Result<Todo<GitlabStorage>, CaptureError> {
-        let token = TOKEN
-            .try_lock()
-            .map_err(|err| CaptureError::FailedToLockToken(err.to_string()))?
-            .clone();
-
-        let token = token.ok_or(CaptureError::NoTokenPresent)?;
-        Todo::load(GitlabStorage::new(token)).map_err(|err| CaptureError::ErrorGettingTodoList(err))
     }
 
     #[export]
@@ -78,12 +64,16 @@ impl Remember {
                 .map(|node| unsafe { node.assume_safe() })
                 .and_then(|node| node.cast::<Label>())
                 .expect("Recent Todos node is missing");
-            label.set_text(get_latest_todos(&todos.inbox));
+            label.set_text(truncate_to_latest_todos(&todos.inbox));
         }
     }
 }
 
-fn get_latest_todos(inbox: &String) -> String {
+pub fn save_token(token: String) {
+    *TOKEN.lock().unwrap() = Some(token);
+}
+
+fn truncate_to_latest_todos(inbox: &String) -> String {
     let todos = inbox
         .split('\n')
         .map(|str| str.to_string())
@@ -99,9 +89,37 @@ fn get_latest_todos(inbox: &String) -> String {
         .to_string()
 }
 
+fn load_todos() -> Result<Todo<GitlabStorage>, CaptureError> {
+    let token = TOKEN
+        .try_lock()
+        .map_err(|err| CaptureError::FailedToLockToken(err.to_string()))?
+        .clone();
+
+    let token = token.ok_or(CaptureError::NoTokenPresent)?;
+    Todo::load(GitlabStorage::new(token)).map_err(|err| CaptureError::ErrorGettingTodoList(err))
+}
+
+fn load_todos_new<T: Storage>(storage: T) -> Result<Todo<T>, CaptureError> {
+    Todo::load(storage).map_err(|err| CaptureError::ErrorGettingTodoList(err))
+}
+
+fn create_storage() -> Result<GitlabStorage, CaptureError> {
+    let token = TOKEN
+        .try_lock()
+        .map_err(|err| CaptureError::FailedToLockToken(err.to_string()))?
+        .clone();
+
+    let token = token.ok_or(CaptureError::NoTokenPresent)?;
+
+    Ok(GitlabStorage::new(token.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::todo::{MockError, MockStorage};
+    use serial_test::serial;
+    use std::rc::Rc;
 
     #[test]
     fn take_all_items_up_to_four() {
@@ -110,7 +128,7 @@ mod tests {
 - three
 - four"
             .to_string();
-        assert_eq!(full_list, get_latest_todos(&full_list));
+        assert_eq!(full_list, truncate_to_latest_todos(&full_list));
     }
 
     #[test]
@@ -127,6 +145,59 @@ mod tests {
 - four"
             .to_string();
 
-        assert_eq!(expected, get_latest_todos(&full_list));
+        assert_eq!(expected, truncate_to_latest_todos(&full_list));
+    }
+
+    #[test]
+    #[serial]
+    fn when_a_token_is_present_create_storage() -> Result<(), Box<dyn std::error::Error>> {
+        save_token("token".to_string());
+
+        let storage = create_storage()?;
+
+        assert_eq!("token", storage.token);
+        Ok(())
+    }
+
+    #[test]
+    #[serial]
+    fn when_a_token_is_not_present() -> Result<(), Box<dyn std::error::Error>> {
+        *TOKEN.lock().unwrap() = None;
+        let storage = create_storage();
+
+        match storage {
+            Err(CaptureError::NoTokenPresent) => assert!(true, "correct error"),
+            Ok(token) => assert!(false, println!("unexpected Ok result - {:?}", token)),
+            Err(err) => assert!(false, println!("unexpected error thrown {:?}", err)),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn load_todos_from_storage() {
+        let storage = Rc::new(MockStorage::new().with_inbox("-first\nsecond"));
+
+        let todos = load_todos_new(storage);
+        assert!(todos.is_ok());
+        assert_eq!("-first\nsecond", todos.unwrap().inbox);
+    }
+
+    #[test]
+    fn map_load_todos_failure_to_capture_error() {
+        let storage = Rc::new(MockStorage::new().with_load_error(MockError::TestFailedToLoad));
+
+        let todos = load_todos_new(storage);
+        match todos {
+            Err(CaptureError::ErrorGettingTodoList(err)) => match err {
+                TodoError::FailedToLoad(sub_err) => match sub_err.downcast::<MockError>() {
+                    Ok(MockError::TestFailedToLoad) => assert!(true, "correct error"),
+                    _ => assert!(false, "incorrect error"),
+                },
+                _ => assert!(false, "incorrect error"),
+            },
+            Ok(_) => assert!(false, println!("unexpected Ok result")),
+            Err(err) => assert!(false, println!("unexpected error thrown {:?}", err)),
+        }
     }
 }
