@@ -35,17 +35,20 @@ impl Remember {
 
     #[export]
     fn _ready(&mut self, owner: TRef<TextureButton>) {
-        match load_todos() {
-            Ok(todos) => {
+        self.todo = create_storage()
+            .and_then(|storage| load_todos(storage))
+            .ok();
+
+        match &self.todo {
+            Some(todos) => {
                 let label = owner
                     .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
                     .map(|node| unsafe { node.assume_safe() })
                     .and_then(|node| node.cast::<Label>())
                     .expect("Recent Todos node is missing");
                 label.set_text(truncate_to_latest_todos(&todos.inbox));
-                self.todo = Some(todos);
             }
-            Err(err) => godot_error!("Error! {:?}", err),
+            None => godot_error!("Nothing to do"),
         }
     }
 
@@ -89,20 +92,6 @@ fn truncate_to_latest_todos(inbox: &String) -> String {
         .to_string()
 }
 
-fn load_todos() -> Result<Todo<GitlabStorage>, CaptureError> {
-    let token = TOKEN
-        .try_lock()
-        .map_err(|err| CaptureError::FailedToLockToken(err.to_string()))?
-        .clone();
-
-    let token = token.ok_or(CaptureError::NoTokenPresent)?;
-    Todo::load(GitlabStorage::new(token)).map_err(|err| CaptureError::ErrorGettingTodoList(err))
-}
-
-fn load_todos_new<T: Storage>(storage: T) -> Result<Todo<T>, CaptureError> {
-    Todo::load(storage).map_err(|err| CaptureError::ErrorGettingTodoList(err))
-}
-
 fn create_storage() -> Result<GitlabStorage, CaptureError> {
     let token = TOKEN
         .try_lock()
@@ -112,6 +101,10 @@ fn create_storage() -> Result<GitlabStorage, CaptureError> {
     let token = token.ok_or(CaptureError::NoTokenPresent)?;
 
     Ok(GitlabStorage::new(token.to_string()))
+}
+
+fn load_todos<T: Storage>(storage: T) -> Result<Todo<T>, CaptureError> {
+    Todo::load(storage).map_err(|err| CaptureError::ErrorGettingTodoList(err))
 }
 
 #[cfg(test)]
@@ -178,7 +171,7 @@ mod tests {
     fn load_todos_from_storage() {
         let storage = Rc::new(MockStorage::new().with_inbox("-first\nsecond"));
 
-        let todos = load_todos_new(storage);
+        let todos = load_todos(storage);
         assert!(todos.is_ok());
         assert_eq!("-first\nsecond", todos.unwrap().inbox);
     }
@@ -187,7 +180,7 @@ mod tests {
     fn map_load_todos_failure_to_capture_error() {
         let storage = Rc::new(MockStorage::new().with_load_error(MockError::TestFailedToLoad));
 
-        let todos = load_todos_new(storage);
+        let todos = load_todos(storage);
         match todos {
             Err(CaptureError::ErrorGettingTodoList(err)) => match err {
                 TodoError::FailedToLoad(sub_err) => match sub_err.downcast::<MockError>() {
