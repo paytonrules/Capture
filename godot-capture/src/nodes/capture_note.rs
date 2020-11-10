@@ -40,43 +40,48 @@ impl Remember {
             .ok();
 
         match &self.todo {
-            Some(todos) => {
-                let label = owner
-                    .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
-                    .map(|node| unsafe { node.assume_safe() })
-                    .and_then(|node| node.cast::<Label>())
-                    .expect("Recent Todos node is missing");
-                label.set_text(truncate_to_latest_todos(&todos.inbox));
-            }
+            Some(todos) => update_view(owner, &todos.inbox),
             None => godot_error!("Nothing to do"),
         }
     }
 
     #[export]
     fn _save_me(&mut self, owner: TRef<TextureButton>) {
-        let new_todo = owner
-            .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/New Todo")
-            .map(|node| unsafe { node.assume_safe() })
-            .and_then(|node| node.cast::<TextEdit>())
-            .expect("New Todo node is missing");
+        let new_todo = new_todo_window(owner);
 
         if let Some(todos) = &mut self.todo {
-            todos.save(&new_todo.text().to_string()).expect("Work?");
-            let label = owner
-                .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
-                .map(|node| unsafe { node.assume_safe() })
-                .and_then(|node| node.cast::<Label>())
-                .expect("Recent Todos node is missing");
-            label.set_text(truncate_to_latest_todos(&todos.inbox));
+            match save_new_todo(todos, &new_todo.text().to_string()) {
+                Ok(_) => update_view(owner, &todos.inbox),
+                Err(err) => godot_error!("Oh no {:?}", err),
+            }
         }
     }
+}
+
+fn update_view(owner: TRef<TextureButton>, inbox: &str) {
+    let inbox_view = owner
+        .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
+        .map(|node| unsafe { node.assume_safe() })
+        .and_then(|node| node.cast::<Label>())
+        .expect("Recent Todos node is missing");
+    inbox_view.set_text(truncate_to_latest_todos(inbox));
+    let new_todo_window = new_todo_window(owner);
+    new_todo_window.set_text("");
+}
+
+fn new_todo_window(owner: TRef<TextureButton>) -> TRef<TextEdit> {
+    owner
+        .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/New Todo")
+        .map(|node| unsafe { node.assume_safe() })
+        .and_then(|node| node.cast::<TextEdit>())
+        .expect("New Todo node is missing")
 }
 
 pub fn save_token(token: String) {
     *TOKEN.lock().unwrap() = Some(token);
 }
 
-fn truncate_to_latest_todos(inbox: &String) -> String {
+fn truncate_to_latest_todos(inbox: &str) -> String {
     let todos = inbox
         .split('\n')
         .map(|str| str.to_string())
@@ -105,6 +110,11 @@ fn create_storage() -> Result<GitlabStorage, CaptureError> {
 
 fn load_todos<T: Storage>(storage: T) -> Result<Todo<T>, CaptureError> {
     Todo::load(storage).map_err(|err| CaptureError::ErrorGettingTodoList(err))
+}
+
+fn save_new_todo<T: Storage>(todos: &mut Todo<T>, new_todo: &str) -> Result<(), CaptureError> {
+    todos.save(&new_todo.to_string())?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -192,5 +202,16 @@ mod tests {
             Ok(_) => assert!(false, println!("unexpected Ok result")),
             Err(err) => assert!(false, println!("unexpected error thrown {:?}", err)),
         }
+    }
+
+    #[test]
+    fn save_new_todo_saves() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = Rc::new(MockStorage::new().with_inbox("- one"));
+        let mut todos = Todo::load(storage)?;
+
+        save_new_todo(&mut todos, "two")?;
+
+        assert_eq!("- one\n- two", todos.inbox);
+        Ok(())
     }
 }
