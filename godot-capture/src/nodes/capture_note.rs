@@ -88,13 +88,17 @@ fn truncate_to_latest_todos(inbox: &str) -> String {
         .collect::<Vec<String>>();
     let todo_count = todos.len();
 
-    todos
-        .iter()
-        .skip(todo_count - 4)
-        .map(|s| s.to_string())
-        .collect::<Vec<String>>()
-        .join("\n")
-        .to_string()
+    if todo_count > 4 {
+        todos
+            .iter()
+            .skip(todo_count - 4)
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
+            .join("\n")
+            .to_string()
+    } else {
+        inbox.to_string()
+    }
 }
 
 fn create_storage() -> Result<GitlabStorage, CaptureError> {
@@ -146,6 +150,20 @@ mod tests {
 - two
 - three
 - four"
+            .to_string();
+
+        assert_eq!(expected, truncate_to_latest_todos(&full_list));
+    }
+
+    #[test]
+    fn take_all_the_entries_if_there_are_lt_four() {
+        let full_list = "- one
+- two
+- three"
+            .to_string();
+        let expected = "- one
+- two
+- three"
             .to_string();
 
         assert_eq!(expected, truncate_to_latest_todos(&full_list));
