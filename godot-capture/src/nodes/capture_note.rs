@@ -1,5 +1,5 @@
 use crate::todo::{GitlabStorage, Storage, Todo, TodoError};
-use gdnative::api::{TextEdit, TextureButton};
+use gdnative::api::{AcceptDialog, TextEdit, TextureButton};
 use gdnative::prelude::*;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
@@ -52,7 +52,14 @@ impl Remember {
         if let Some(todos) = &mut self.todo {
             match save_new_todo(todos, &new_todo.text().to_string()) {
                 Ok(_) => update_view(owner, &todos.inbox),
-                Err(err) => godot_error!("Oh no {:?}", err),
+                Err(err) => {
+                    let dialog = AcceptDialog::new();
+                    dialog.set_text(format!("Could Not Save Todo: {:?}", err));
+                    let dialog = unsafe { dialog.assume_shared() };
+                    owner.add_child(dialog, false);
+                    let dialog = unsafe { dialog.assume_safe() };
+                    dialog.popup_centered(Vector2::new(0.0, 0.0));
+                }
             }
         }
     }
