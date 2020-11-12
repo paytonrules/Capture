@@ -2,7 +2,7 @@ use super::storage::Storage;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum TodoError {
+pub enum InboxError {
     #[error("Unable to save todo item {0}")]
     CouldNotSaveTodo(String),
 
@@ -27,30 +27,32 @@ where
         }
     }
 
-    pub fn load(storage: T) -> Result<Self, TodoError> {
-        let inbox = storage.load().map_err(|err| TodoError::FailedToLoad(err))?;
+    pub fn load(storage: T) -> Result<Self, InboxError> {
+        let inbox = storage
+            .load()
+            .map_err(|err| InboxError::FailedToLoad(err))?;
         Ok(Todo {
             storage,
             inbox: inbox.trim().to_string(),
         })
     }
 
-    pub fn save(&mut self, note: &String) -> Result<(), TodoError> {
+    pub fn save(&mut self, note: &String) -> Result<(), InboxError> {
         self.inbox.push_str(format!("\n- {}", note).as_str());
         self.storage
             .update(&self.inbox)
-            .map_err(|err| TodoError::CouldNotSaveTodo(format!("{}", err.to_string())))
+            .map_err(|err| InboxError::CouldNotSaveTodo(format!("{}", err.to_string())))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::todo::mock_storage::{MockError, MockStorage};
+    use crate::inbox::mock_storage::{MockError, MockStorage};
     use std::rc::Rc;
 
     #[test]
-    fn save_note_appends_to_empty_todo_list() -> Result<(), TodoError> {
+    fn save_note_appends_to_empty_todo_list() -> Result<(), InboxError> {
         let storage = MockStorage::new().as_rc();
         let mut todo = Todo::new(Rc::clone(&storage));
 
@@ -61,7 +63,7 @@ mod tests {
     }
 
     #[test]
-    fn save_note_adds_a_newline_between_notes() -> Result<(), TodoError> {
+    fn save_note_adds_a_newline_between_notes() -> Result<(), InboxError> {
         let storage = MockStorage::new().as_rc();
         let mut todo = Todo::new(Rc::clone(&storage));
 
@@ -85,7 +87,7 @@ mod tests {
     }
 
     #[test]
-    fn when_todo_is_loaded_get_inbox_from_storage() -> Result<(), TodoError> {
+    fn when_todo_is_loaded_get_inbox_from_storage() -> Result<(), InboxError> {
         let storage = MockStorage::new().with_inbox("- First todo").as_rc();
 
         let mut todo = Todo::load(Rc::clone(&storage))?;
@@ -97,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn when_todo_is_loaded_trim_excess_newlines() -> Result<(), TodoError> {
+    fn when_todo_is_loaded_trim_excess_newlines() -> Result<(), InboxError> {
         let storage = MockStorage::new().with_inbox("\n- First todo\n").as_rc();
 
         let mut todo = Todo::load(Rc::clone(&storage))?;

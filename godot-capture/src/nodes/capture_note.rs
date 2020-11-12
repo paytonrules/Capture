@@ -1,4 +1,4 @@
-use crate::inbox::{GitlabStorage, Storage, Todo, TodoError};
+use crate::inbox::{GitlabStorage, InboxError, Storage, Todo};
 use gdnative::api::{AcceptDialog, TextEdit, TextureButton};
 use gdnative::prelude::*;
 use lazy_static::lazy_static;
@@ -18,7 +18,7 @@ pub enum CaptureError {
     NoTokenPresent,
 
     #[error("Error getting todo list: {0}")]
-    ErrorGettingTodoList(#[from] TodoError),
+    ErrorGettingTodoList(#[from] InboxError),
 }
 
 #[derive(NativeClass)]
@@ -163,7 +163,7 @@ fn save_new_todo<T: Storage>(todos: &mut Todo<T>, new_todo: &str) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::todo::{MockError, MockStorage};
+    use crate::inbox::{MockError, MockStorage};
     use serial_test::serial;
     use std::rc::Rc;
 
@@ -250,7 +250,7 @@ mod tests {
         let todos = load_todos(storage);
         match todos {
             Err(CaptureError::ErrorGettingTodoList(err)) => match err {
-                TodoError::FailedToLoad(sub_err) => match sub_err.downcast::<MockError>() {
+                InboxError::FailedToLoad(sub_err) => match sub_err.downcast::<MockError>() {
                     Ok(MockError::TestFailedToLoad) => assert!(true, "correct error"),
                     _ => assert!(false, "incorrect error"),
                 },
