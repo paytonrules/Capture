@@ -63,6 +63,16 @@ impl Remember {
             }
         }
     }
+
+    #[export]
+    fn _button_down(&self, owner: TRef<TextureButton>) {
+        owner.set_position(pressed_button(owner.position()), false);
+    }
+
+    #[export]
+    fn _button_up(&self, owner: TRef<TextureButton>) {
+        owner.set_position(released_button(owner.position()), false);
+    }
 }
 
 fn update_view(owner: TRef<TextureButton>, inbox: &str) {
@@ -82,6 +92,16 @@ fn new_todo_window(owner: TRef<TextureButton>) -> TRef<TextEdit> {
         .map(|node| unsafe { node.assume_safe() })
         .and_then(|node| node.cast::<TextEdit>())
         .expect("New Todo node is missing")
+}
+const BUTTON_PRESS_MOVEMENT: f32 = 2.0;
+fn pressed_button(mut position: Vector2) -> Vector2 {
+    position.y = position.y + BUTTON_PRESS_MOVEMENT;
+    position
+}
+
+fn released_button(mut position: Vector2) -> Vector2 {
+    position.y = position.y - BUTTON_PRESS_MOVEMENT;
+    position
 }
 
 pub fn save_token(token: String) {
@@ -238,5 +258,25 @@ mod tests {
 
         assert_eq!("- one\n- two", todos.inbox);
         Ok(())
+    }
+
+    #[test]
+    fn pressed_button_returns_a_lower_position() {
+        let position = Vector2::new(10.0, 14.0);
+
+        let new_position = pressed_button(position);
+
+        assert_eq!(10.0, new_position.x);
+        assert_eq!(14.0 + BUTTON_PRESS_MOVEMENT, new_position.y);
+    }
+
+    #[test]
+    fn released_button_returns_a_higher_position() {
+        let position = Vector2::new(10.0, 16.0);
+
+        let new_position = released_button(position);
+
+        assert_eq!(10.0, new_position.x);
+        assert_eq!(16.0 - BUTTON_PRESS_MOVEMENT, new_position.y);
     }
 }

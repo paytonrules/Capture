@@ -77,4 +77,6 @@ margin_bottom = 36.0
 texture_normal = ExtResource( 1 )
 texture_pressed = ExtResource( 1 )
 script = ExtResource( 3 )
+[connection signal="button_down" from="CenterContainer/VBoxContainer/CenterContainer/Save" to="CenterContainer/VBoxContainer/CenterContainer/Save" method="_button_down"]
+[connection signal="button_up" from="CenterContainer/VBoxContainer/CenterContainer/Save" to="CenterContainer/VBoxContainer/CenterContainer/Save" method="_button_up"]
 [connection signal="pressed" from="CenterContainer/VBoxContainer/CenterContainer/Save" to="CenterContainer/VBoxContainer/CenterContainer/Save" method="_save_me"]
