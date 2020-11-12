@@ -18,7 +18,7 @@ pub enum CaptureError {
     NoTokenPresent,
 
     #[error("Error getting inbx: {0}")]
-    ErrorGettingTodoList(#[from] InboxError),
+    ErrorGettingInbox(#[from] InboxError),
 }
 
 #[derive(NativeClass)]
@@ -35,13 +35,16 @@ impl Remember {
 
     #[export]
     fn _ready(&mut self, owner: TRef<TextureButton>) {
-        match create_storage().and_then(|storage| load_todos(storage)) {
-            Ok(todos) => self.inbox = Some(todos),
-            Err(err) => display_error(owner, err),
-        }
+        self.inbox = create_storage()
+            .and_then(|storage| load_inbox(storage))
+            .or_else(|err| {
+                display_error(owner, &err);
+                Err(err)
+            })
+            .ok();
 
         match &self.inbox {
-            Some(todos) => update_view(owner, &todos.reminders),
+            Some(inbox) => update_view(owner, &inbox.reminders),
             None => clear_list(owner),
         }
     }
@@ -53,7 +56,7 @@ impl Remember {
         if let Some(inbox) = &mut self.inbox {
             match save_new_reminder(inbox, &new_reminder.text().to_string()) {
                 Ok(_) => update_view(owner, &inbox.reminders),
-                Err(err) => display_error(owner, err),
+                Err(err) => display_error(owner, &err),
             }
         }
     }
@@ -69,7 +72,7 @@ impl Remember {
     }
 }
 
-fn display_error(owner: TRef<TextureButton>, err: CaptureError) {
+fn display_error(owner: TRef<TextureButton>, err: &CaptureError) {
     let dialog = AcceptDialog::new();
     dialog.set_text(err.to_string());
     let dialog = unsafe { dialog.assume_shared() };
@@ -151,12 +154,12 @@ fn create_storage() -> Result<GitlabStorage, CaptureError> {
     Ok(GitlabStorage::new(token.to_string()))
 }
 
-fn load_todos<T: Storage>(storage: T) -> Result<Inbox<T>, CaptureError> {
-    Inbox::load(storage).map_err(|err| CaptureError::ErrorGettingTodoList(err))
+fn load_inbox<T: Storage>(storage: T) -> Result<Inbox<T>, CaptureError> {
+    Inbox::load(storage).map_err(|err| CaptureError::ErrorGettingInbox(err))
 }
 
-fn save_new_reminder<T: Storage>(todos: &mut Inbox<T>, new_todo: &str) -> Result<(), CaptureError> {
-    todos.save(&new_todo.to_string())?;
+fn save_new_reminder<T: Storage>(inbox: &mut Inbox<T>, reminder: &str) -> Result<(), CaptureError> {
+    inbox.save(&reminder.to_string())?;
     Ok(())
 }
 
@@ -238,7 +241,7 @@ mod tests {
     fn load_todos_from_storage() {
         let storage = Rc::new(MockStorage::new().with_inbox("-first\nsecond"));
 
-        let todos = load_todos(storage);
+        let todos = load_inbox(storage);
         assert!(todos.is_ok());
         assert_eq!("-first\nsecond", todos.unwrap().reminders);
     }
@@ -247,9 +250,9 @@ mod tests {
     fn map_load_todos_failure_to_capture_error() {
         let storage = Rc::new(MockStorage::new().with_load_error(MockError::TestFailedToLoad));
 
-        let todos = load_todos(storage);
+        let todos = load_inbox(storage);
         match todos {
-            Err(CaptureError::ErrorGettingTodoList(err)) => match err {
+            Err(CaptureError::ErrorGettingInbox(err)) => match err {
                 InboxError::FailedToLoad(sub_err) => match sub_err.downcast::<MockError>() {
                     Ok(MockError::TestFailedToLoad) => assert!(true, "correct error"),
                     _ => assert!(false, "incorrect error"),
