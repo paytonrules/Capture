@@ -19,11 +19,11 @@ impl GitlabStorage {
 }
 
 impl Storage for GitlabStorage {
-    fn update(&self, inbox: &String) -> anyhow::Result<()> {
+    fn update(&self, reminders: &String) -> anyhow::Result<()> {
         let content = json!({
             "branch": "master",
-            "content": inbox,
-            "commit_message": "Todo added from Capture app"
+            "content": reminders,
+            "commit_message": "Reminder(s) added from Capture app"
         });
         let response = ureq::put(
             "https://gitlab.com/api/v4/projects/3723174/repository/files/gtd%2Finbox%2Eorg",

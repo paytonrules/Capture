@@ -17,30 +17,30 @@ pub enum CaptureError {
     #[error("No token present")]
     NoTokenPresent,
 
-    #[error("Error getting todo list: {0}")]
+    #[error("Error getting inbx: {0}")]
     ErrorGettingTodoList(#[from] InboxError),
 }
 
 #[derive(NativeClass)]
 #[inherit(TextureButton)]
 pub struct Remember {
-    todo: Option<Inbox<GitlabStorage>>,
+    inbox: Option<Inbox<GitlabStorage>>,
 }
 
 #[methods]
 impl Remember {
     fn new(_owner: &TextureButton) -> Self {
-        Remember { todo: None }
+        Remember { inbox: None }
     }
 
     #[export]
     fn _ready(&mut self, owner: TRef<TextureButton>) {
         match create_storage().and_then(|storage| load_todos(storage)) {
-            Ok(todos) => self.todo = Some(todos),
+            Ok(todos) => self.inbox = Some(todos),
             Err(err) => display_error(owner, err),
         }
 
-        match &self.todo {
+        match &self.inbox {
             Some(todos) => update_view(owner, &todos.reminders),
             None => clear_list(owner),
         }
@@ -48,11 +48,11 @@ impl Remember {
 
     #[export]
     fn _save_me(&mut self, owner: TRef<TextureButton>) {
-        let new_todo = new_todo_window(owner);
+        let new_reminder = new_reminder_window(owner);
 
-        if let Some(todos) = &mut self.todo {
-            match save_new_todo(todos, &new_todo.text().to_string()) {
-                Ok(_) => update_view(owner, &todos.reminders),
+        if let Some(inbox) = &mut self.inbox {
+            match save_new_reminder(inbox, &new_reminder.text().to_string()) {
+                Ok(_) => update_view(owner, &inbox.reminders),
                 Err(err) => display_error(owner, err),
             }
         }
@@ -83,10 +83,10 @@ fn update_view(owner: TRef<TextureButton>, inbox: &str) {
         .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
         .map(|node| unsafe { node.assume_safe() })
         .and_then(|node| node.cast::<Label>())
-        .expect("Recent Todos node is missing");
-    inbox_view.set_text(truncate_to_latest_todos(inbox));
-    let new_todo_window = new_todo_window(owner);
-    new_todo_window.set_text("");
+        .expect("Recent Reminders node is missing");
+    inbox_view.set_text(truncate_to_latest_reminders(inbox));
+    let new_reminder_window = new_reminder_window(owner);
+    new_reminder_window.set_text("");
 }
 
 fn clear_list(owner: TRef<TextureButton>) {
@@ -94,16 +94,16 @@ fn clear_list(owner: TRef<TextureButton>) {
         .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
         .map(|node| unsafe { node.assume_safe() })
         .and_then(|node| node.cast::<Label>())
-        .expect("Recent Todos node is missing");
+        .expect("Recent Reminders node is missing");
     inbox_view.set_text("");
 }
 
-fn new_todo_window(owner: TRef<TextureButton>) -> TRef<TextEdit> {
+fn new_reminder_window(owner: TRef<TextureButton>) -> TRef<TextEdit> {
     owner
         .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/New Todo")
         .map(|node| unsafe { node.assume_safe() })
         .and_then(|node| node.cast::<TextEdit>())
-        .expect("New Todo node is missing")
+        .expect("New Reminder node is missing")
 }
 const BUTTON_PRESS_MOVEMENT: f32 = 2.0;
 fn pressed_button(mut position: Vector2) -> Vector2 {
@@ -120,23 +120,23 @@ pub fn save_token(token: String) {
     *TOKEN.lock().unwrap() = Some(token);
 }
 
-fn truncate_to_latest_todos(inbox: &str) -> String {
-    let todos = inbox
+fn truncate_to_latest_reminders(all_reminders: &str) -> String {
+    let reminder_list = all_reminders
         .split('\n')
         .map(|str| str.to_string())
         .collect::<Vec<String>>();
-    let todo_count = todos.len();
+    let reminder_count = reminder_list.len();
 
-    if todo_count > 4 {
-        todos
+    if reminder_count > 4 {
+        reminder_list
             .iter()
-            .skip(todo_count - 4)
+            .skip(reminder_count - 4)
             .map(|s| s.to_string())
             .collect::<Vec<String>>()
             .join("\n")
             .to_string()
     } else {
-        inbox.to_string()
+        all_reminders.to_string()
     }
 }
 
@@ -155,7 +155,7 @@ fn load_todos<T: Storage>(storage: T) -> Result<Inbox<T>, CaptureError> {
     Inbox::load(storage).map_err(|err| CaptureError::ErrorGettingTodoList(err))
 }
 
-fn save_new_todo<T: Storage>(todos: &mut Inbox<T>, new_todo: &str) -> Result<(), CaptureError> {
+fn save_new_reminder<T: Storage>(todos: &mut Inbox<T>, new_todo: &str) -> Result<(), CaptureError> {
     todos.save(&new_todo.to_string())?;
     Ok(())
 }
@@ -174,7 +174,7 @@ mod tests {
 - three
 - four"
             .to_string();
-        assert_eq!(full_list, truncate_to_latest_todos(&full_list));
+        assert_eq!(full_list, truncate_to_latest_reminders(&full_list));
     }
 
     #[test]
@@ -191,7 +191,7 @@ mod tests {
 - four"
             .to_string();
 
-        assert_eq!(expected, truncate_to_latest_todos(&full_list));
+        assert_eq!(expected, truncate_to_latest_reminders(&full_list));
     }
 
     #[test]
@@ -205,7 +205,7 @@ mod tests {
 - three"
             .to_string();
 
-        assert_eq!(expected, truncate_to_latest_todos(&full_list));
+        assert_eq!(expected, truncate_to_latest_reminders(&full_list));
     }
 
     #[test]
@@ -266,7 +266,7 @@ mod tests {
         let storage = Rc::new(MockStorage::new().with_inbox("- one"));
         let mut todos = Inbox::load(storage)?;
 
-        save_new_todo(&mut todos, "two")?;
+        save_new_reminder(&mut todos, "two")?;
 
         assert_eq!("- one\n- two", todos.reminders);
         Ok(())
