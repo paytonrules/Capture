@@ -1,4 +1,4 @@
-use crate::inbox::{GitlabStorage, InboxError, Storage, Todo};
+use crate::inbox::{GitlabStorage, Inbox, InboxError, Storage};
 use gdnative::api::{AcceptDialog, TextEdit, TextureButton};
 use gdnative::prelude::*;
 use lazy_static::lazy_static;
@@ -24,7 +24,7 @@ pub enum CaptureError {
 #[derive(NativeClass)]
 #[inherit(TextureButton)]
 pub struct Remember {
-    todo: Option<Todo<GitlabStorage>>,
+    todo: Option<Inbox<GitlabStorage>>,
 }
 
 #[methods]
@@ -41,7 +41,7 @@ impl Remember {
         }
 
         match &self.todo {
-            Some(todos) => update_view(owner, &todos.inbox),
+            Some(todos) => update_view(owner, &todos.reminders),
             None => clear_list(owner),
         }
     }
@@ -52,7 +52,7 @@ impl Remember {
 
         if let Some(todos) = &mut self.todo {
             match save_new_todo(todos, &new_todo.text().to_string()) {
-                Ok(_) => update_view(owner, &todos.inbox),
+                Ok(_) => update_view(owner, &todos.reminders),
                 Err(err) => display_error(owner, err),
             }
         }
@@ -151,11 +151,11 @@ fn create_storage() -> Result<GitlabStorage, CaptureError> {
     Ok(GitlabStorage::new(token.to_string()))
 }
 
-fn load_todos<T: Storage>(storage: T) -> Result<Todo<T>, CaptureError> {
-    Todo::load(storage).map_err(|err| CaptureError::ErrorGettingTodoList(err))
+fn load_todos<T: Storage>(storage: T) -> Result<Inbox<T>, CaptureError> {
+    Inbox::load(storage).map_err(|err| CaptureError::ErrorGettingTodoList(err))
 }
 
-fn save_new_todo<T: Storage>(todos: &mut Todo<T>, new_todo: &str) -> Result<(), CaptureError> {
+fn save_new_todo<T: Storage>(todos: &mut Inbox<T>, new_todo: &str) -> Result<(), CaptureError> {
     todos.save(&new_todo.to_string())?;
     Ok(())
 }
@@ -240,7 +240,7 @@ mod tests {
 
         let todos = load_todos(storage);
         assert!(todos.is_ok());
-        assert_eq!("-first\nsecond", todos.unwrap().inbox);
+        assert_eq!("-first\nsecond", todos.unwrap().reminders);
     }
 
     #[test]
@@ -264,11 +264,11 @@ mod tests {
     #[test]
     fn save_new_todo_saves() -> Result<(), Box<dyn std::error::Error>> {
         let storage = Rc::new(MockStorage::new().with_inbox("- one"));
-        let mut todos = Todo::load(storage)?;
+        let mut todos = Inbox::load(storage)?;
 
         save_new_todo(&mut todos, "two")?;
 
-        assert_eq!("- one\n- two", todos.inbox);
+        assert_eq!("- one\n- two", todos.reminders);
         Ok(())
     }
 
