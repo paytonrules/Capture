@@ -35,13 +35,14 @@ impl Remember {
 
     #[export]
     fn _ready(&mut self, owner: TRef<TextureButton>) {
-        self.todo = create_storage()
-            .and_then(|storage| load_todos(storage))
-            .ok();
+        match create_storage().and_then(|storage| load_todos(storage)) {
+            Ok(todos) => self.todo = Some(todos),
+            Err(err) => display_error(owner, err),
+        }
 
         match &self.todo {
             Some(todos) => update_view(owner, &todos.inbox),
-            None => godot_error!("Nothing to do"),
+            None => clear_list(owner),
         }
     }
 
@@ -52,14 +53,7 @@ impl Remember {
         if let Some(todos) = &mut self.todo {
             match save_new_todo(todos, &new_todo.text().to_string()) {
                 Ok(_) => update_view(owner, &todos.inbox),
-                Err(err) => {
-                    let dialog = AcceptDialog::new();
-                    dialog.set_text(format!("Could Not Save Todo: {:?}", err));
-                    let dialog = unsafe { dialog.assume_shared() };
-                    owner.add_child(dialog, false);
-                    let dialog = unsafe { dialog.assume_safe() };
-                    dialog.popup_centered(Vector2::new(0.0, 0.0));
-                }
+                Err(err) => display_error(owner, err),
             }
         }
     }
@@ -75,6 +69,15 @@ impl Remember {
     }
 }
 
+fn display_error(owner: TRef<TextureButton>, err: CaptureError) {
+    let dialog = AcceptDialog::new();
+    dialog.set_text(err.to_string());
+    let dialog = unsafe { dialog.assume_shared() };
+    owner.add_child(dialog, false);
+    let dialog = unsafe { dialog.assume_safe() };
+    dialog.popup_centered(Vector2::new(0.0, 0.0));
+}
+
 fn update_view(owner: TRef<TextureButton>, inbox: &str) {
     let inbox_view = owner
         .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
@@ -84,6 +87,15 @@ fn update_view(owner: TRef<TextureButton>, inbox: &str) {
     inbox_view.set_text(truncate_to_latest_todos(inbox));
     let new_todo_window = new_todo_window(owner);
     new_todo_window.set_text("");
+}
+
+fn clear_list(owner: TRef<TextureButton>) {
+    let inbox_view = owner
+        .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
+        .map(|node| unsafe { node.assume_safe() })
+        .and_then(|node| node.cast::<Label>())
+        .expect("Recent Todos node is missing");
+    inbox_view.set_text("");
 }
 
 fn new_todo_window(owner: TRef<TextureButton>) -> TRef<TextEdit> {
