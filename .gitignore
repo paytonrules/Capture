@@ -80,10 +80,6 @@ Cargo.lock
 
 # End of https://www.toptal.com/developers/gitignore/api/godot,rust,emacs
 
-godot-capture/target
-.DS_Store
-
-
 # Created by https://www.toptal.com/developers/gitignore/api/xcode
 # Edit at https://www.toptal.com/developers/gitignore?templates=xcode
 
@@ -123,3 +119,7 @@ iOSApp/!*.xcworkspace/contents.xcworkspacedata
 iOSApp/**/xcshareddata/WorkspaceSettings.xcsettings
 
 # End of https://www.toptal.com/developers/gitignore/api/xcode
+
+godot-capture/target
+.DS_Store
+iOSApp/Capture/godot-capture/target
