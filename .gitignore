@@ -116,10 +116,10 @@ DerivedData/
 /*.gcno
 
 ### Xcode Patch ###
-*.xcodeproj/*
-!*.xcodeproj/project.pbxproj
-!*.xcodeproj/xcshareddata/
-!*.xcworkspace/contents.xcworkspacedata
-**/xcshareddata/WorkspaceSettings.xcsettings
+iOSApp/*.xcodeproj/*
+iOSApp/!*.xcodeproj/project.pbxproj
+iOSApp/!*.xcodeproj/xcshareddata/
+iOSApp/!*.xcworkspace/contents.xcworkspacedata
+iOSApp/**/xcshareddata/WorkspaceSettings.xcsettings
 
 # End of https://www.toptal.com/developers/gitignore/api/xcode
