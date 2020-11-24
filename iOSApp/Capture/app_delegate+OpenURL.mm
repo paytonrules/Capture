@@ -8,6 +8,7 @@
 #import <objc/runtime.h>
 #import <UIKit/UIKit.h>
 #import "app_delegate.h"
+#import "core/engine.h"
 
 @implementation AppDelegate (OpenURL)
 
