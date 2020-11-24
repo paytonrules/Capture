@@ -19,6 +19,7 @@
         NSArray<NSString*> *pair = [segment componentsSeparatedByString:@"="];
         dic[pair[0]] = pair[1];
     }
+    NSLog(@"openURL happened. All is well!");
     
     return TRUE;
 }
