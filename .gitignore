@@ -123,3 +123,4 @@ iOSApp/**/xcshareddata/WorkspaceSettings.xcsettings
 godot-capture/target
 .DS_Store
 iOSApp/Capture/godot-capture/target
+iOSApp/Capture.pck
