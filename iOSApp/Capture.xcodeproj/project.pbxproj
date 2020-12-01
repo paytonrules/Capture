@@ -33,6 +33,7 @@
 		071C19C1256C9E7D009E345D /* gl_view.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = gl_view.h; sourceTree = "<group>"; };
 		071C19C2256C9EC3009E345D /* view_controller.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = view_controller.h; sourceTree = "<group>"; };
 		0756697025640A4700F53892 /* libgodot_capture.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libgodot_capture.a; path = "Capture/godot-capture/target/universal/debug/libgodot_capture.a"; sourceTree = "<group>"; };
+		075AF99F2572A52F00631EAF /* godot_capture.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = godot_capture.h; sourceTree = "<group>"; };
 		078CB7A82566ACC100BE662B /* app_delegate+OpenURL.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "app_delegate+OpenURL.mm"; sourceTree = "<group>"; };
 		078CB7AA2566B11E00BE662B /* app_delegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = app_delegate.h; sourceTree = "<group>"; };
 		1F1575711F582BE20003B888 /* dylibs */ = {isa = PBXFileReference; lastKnownFileType = folder; name = dylibs; path = Capture/dylibs; sourceTree = "<group>"; };
@@ -98,6 +99,7 @@
 				078CB7AA2566B11E00BE662B /* app_delegate.h */,
 				071C19C1256C9E7D009E345D /* gl_view.h */,
 				071C19C2256C9EC3009E345D /* view_controller.h */,
+				075AF99F2572A52F00631EAF /* godot_capture.h */,
 			);
 			path = Capture;
 			sourceTree = "<group>";
