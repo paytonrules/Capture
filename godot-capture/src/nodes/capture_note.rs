@@ -1,23 +1,15 @@
 use crate::inbox::{GitlabStorage, Inbox, InboxError, Storage};
+use crate::oauth::{get_token, TokenError};
 use gdnative::api::{AcceptDialog, TextEdit, TextureButton};
 use gdnative::prelude::*;
-use lazy_static::lazy_static;
-use std::sync::Mutex;
 use thiserror::Error;
-
-lazy_static! {
-    static ref TOKEN: Mutex<Option<String>> = Mutex::new(None);
-}
 
 #[derive(Debug, Error)]
 pub enum CaptureError {
-    #[error("Unable to get token lock {0}")]
-    FailedToLockToken(String),
+    #[error("Token Not Available: {0}")]
+    TokenFailure(#[from] TokenError),
 
-    #[error("No token present")]
-    NoTokenPresent,
-
-    #[error("Error getting inbx: {0}")]
+    #[error("Error getting inbox: {0}")]
     ErrorGettingInbox(#[from] InboxError),
 }
 
@@ -108,6 +100,7 @@ fn new_reminder_window(owner: TRef<TextureButton>) -> TRef<TextEdit> {
         .and_then(|node| node.cast::<TextEdit>())
         .expect("New Reminder node is missing")
 }
+
 const BUTTON_PRESS_MOVEMENT: f32 = 2.0;
 fn pressed_button(mut position: Vector2) -> Vector2 {
     position.y = position.y + BUTTON_PRESS_MOVEMENT;
@@ -117,10 +110,6 @@ fn pressed_button(mut position: Vector2) -> Vector2 {
 fn released_button(mut position: Vector2) -> Vector2 {
     position.y = position.y - BUTTON_PRESS_MOVEMENT;
     position
-}
-
-pub fn save_token(token: String) {
-    *TOKEN.lock().unwrap() = Some(token);
 }
 
 fn truncate_to_latest_reminders(all_reminders: &str) -> String {
@@ -144,12 +133,7 @@ fn truncate_to_latest_reminders(all_reminders: &str) -> String {
 }
 
 fn create_storage() -> Result<GitlabStorage, CaptureError> {
-    let token = TOKEN
-        .try_lock()
-        .map_err(|err| CaptureError::FailedToLockToken(err.to_string()))?
-        .clone();
-
-    let token = token.ok_or(CaptureError::NoTokenPresent)?;
+    let token = get_token().map_err(|err| CaptureError::TokenFailure(err))?;
 
     Ok(GitlabStorage::new(token.to_string()))
 }
@@ -167,6 +151,7 @@ fn save_new_reminder<T: Storage>(inbox: &mut Inbox<T>, reminder: &str) -> Result
 mod tests {
     use super::*;
     use crate::inbox::{MockError, MockStorage};
+    use crate::oauth::{clear_token, save_token};
     use serial_test::serial;
     use std::rc::Rc;
 
@@ -225,11 +210,11 @@ mod tests {
     #[test]
     #[serial]
     fn when_a_token_is_not_present() -> Result<(), Box<dyn std::error::Error>> {
-        *TOKEN.lock().unwrap() = None;
+        clear_token();
         let storage = create_storage();
 
         match storage {
-            Err(CaptureError::NoTokenPresent) => assert!(true, "correct error"),
+            Err(CaptureError::TokenFailure(_)) => assert!(true, "correct error"),
             Ok(token) => assert!(false, println!("unexpected Ok result - {:?}", token)),
             Err(err) => assert!(false, println!("unexpected error thrown {:?}", err)),
         }

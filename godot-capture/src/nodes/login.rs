@@ -1,4 +1,4 @@
-use super::capture_note::save_token;
+use crate::oauth::save_token;
 use gdnative::api::OS;
 use gdnative::prelude::*;
 
@@ -40,6 +40,3 @@ impl Login {
             });
     }
 }
-
-#[cfg(test)]
-mod tests {}
