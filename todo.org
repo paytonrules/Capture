@@ -1,8 +1,9 @@
-#+TITLE: Todo List for "Capture"
+#+TITLE: Refactor to get token working
 
-* TODO Setup Rust Skeleton
-* TODO Create UI Interface
-* TODO Build and run on MacOS
-* TODO Setup CI on .gitlab
-* TODO Install on my phone
-* TODO
+* DONE Move the Token out of the capture node and into a domain object (Provide? OAuth?)
+* TODO Merge nodes: Login/OAuth into one
+* TODO Move the Token code into its own file
+* TODO Move checking for a token out of the oauth node and into the oauth module
+* Set the domain object token from our exposed function
+- End goal is both the exposed function and the webserver set the token via the same function call
+* Make Sure the webserver is using that function call
