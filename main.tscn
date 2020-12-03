@@ -13,6 +13,7 @@ font_data = ExtResource( 3 )
 [node name="Login" type="Control"]
 anchor_right = 1.0
 anchor_bottom = 1.0
+script = ExtResource( 1 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
@@ -65,13 +66,12 @@ margin_right = 227.0
 margin_bottom = 299.0
 custom_fonts/font = SubResource( 1 )
 text = "Log In"
-script = ExtResource( 1 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
 
 [node name="OAuth Webserver" type="Node" parent="."]
 script = ExtResource( 5 )
-[connection signal="pressed" from="Background/CenterContainer/VBoxContainer/LoginButton" to="Background/CenterContainer/VBoxContainer/LoginButton" method="_button_pressed"]
+[connection signal="pressed" from="Background/CenterContainer/VBoxContainer/LoginButton" to="." method="_button_pressed"]
 [connection signal="login_url_ready" from="OAuth Webserver" to="Background/CenterContainer/VBoxContainer/LoginButton" method="_login_url_received"]
 [connection signal="token_received" from="OAuth Webserver" to="Background/CenterContainer/VBoxContainer/LoginButton" method="_token_received"]
