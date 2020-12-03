@@ -1,22 +1,17 @@
-use crate::oauth::{save_token, OAuthProvider, RocketWebServer};
+use crate::oauth::{get_token, OAuthProvider, RocketWebServer};
 use gdnative::api::OS;
 use gdnative::prelude::*;
-use std::sync::mpsc::Receiver;
 
 #[derive(NativeClass)]
 #[inherit(Node)]
 pub struct Login {
     login_url: Option<String>,
-    token_receiver: Option<Receiver<String>>,
 }
 
 #[methods]
 impl Login {
     fn new(_owner: &Node) -> Self {
-        Login {
-            login_url: None,
-            token_receiver: None,
-        }
+        Login { login_url: None }
     }
 
     #[export]
@@ -25,8 +20,7 @@ impl Login {
         let port = port_check::free_local_port();
         match RocketWebServer::builder().port(port).build() {
             Ok(rocket) => {
-                let (token_receiver, url) = provider.provide(rocket);
-                self.token_receiver = Some(token_receiver);
+                let url = provider.provide(rocket);
                 self.login_url = Some(url);
             }
             Err(err) => godot_error!("Error {:?} building rocket", err),
@@ -44,22 +38,17 @@ impl Login {
 
     #[export]
     fn _process(&self, owner: TRef<Node>, _delta: f64) {
-        // biz_thing.check_for_token()
-        //
-        if let Some(token_receiver) = &self.token_receiver {
-            if let Ok(token) = token_receiver.try_recv() {
-                self.token_received(owner, token)
-            }
+        if let Ok(_) = get_token() {
+            self.token_received(owner)
         }
     }
 
     #[export]
-    fn token_received(&self, owner: TRef<Node>, token: String) {
+    fn token_received(&self, owner: TRef<Node>) {
         owner
             .get_tree()
             .map(|tree| unsafe { tree.assume_safe() })
             .map(|tree| {
-                save_token(token);
                 tree.change_scene("res://CaptureNote.tscn")
                     .expect("Should change scene");
             });

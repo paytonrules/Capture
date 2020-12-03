@@ -1,5 +1,6 @@
+use super::save_token;
 use super::webserver::WebServer;
-use std::sync::mpsc::{sync_channel, Receiver};
+use std::sync::mpsc::sync_channel;
 use std::thread;
 
 pub struct OAuthProvider;
@@ -9,26 +10,33 @@ impl OAuthProvider {
         OAuthProvider
     }
 
-    pub fn provide<T: WebServer + Send + Sync + 'static>(
-        &self,
-        server: T,
-    ) -> (Receiver<String>, String) {
-        let (send, recv) = sync_channel(1);
+    pub fn provide<T: WebServer + Send + Sync + 'static>(&self, server: T) -> String {
+        let (send, token) = sync_channel(1);
 
         let server = server.token_sender(send);
+        //         let login_url = "https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=paytonrules.Capture://capture/&response_type=token&state=100&scope=api".to_string();
         let login_url = format!("https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=http://127.0.0.1:{}/capture/&response_type=token&state=100&scope=api",
                        server.port());
 
         thread::spawn(move || {
             server.launch();
         });
-        (recv, login_url)
+
+        thread::spawn(move || {
+            if let Ok(token) = token.recv() {
+                save_token(token);
+            }
+        });
+
+        login_url
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oauth::{clear_token, get_token};
+    use serial_test::serial;
     use std::sync::mpsc::SyncSender;
 
     #[derive(Clone)]
@@ -63,14 +71,16 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn launches_webserver_on_provide() {
+        clear_token();
         let server = OAuthProvider::new();
         let mock_server = MocketWrapper::new();
 
-        let (receiver, _url) = server.provide(mock_server.clone());
-        let token = receiver.recv_timeout(std::time::Duration::from_millis(10));
+        let _url = server.provide(mock_server.clone());
+        std::thread::sleep(std::time::Duration::from_millis(10));
 
-        assert_eq!("token".to_string(), token.unwrap());
+        assert_eq!("token".to_string(), get_token().unwrap());
     }
 
     #[test]
@@ -79,7 +89,7 @@ mod tests {
         let mut mock_server = MocketWrapper::new();
         mock_server.port = 10000;
 
-        let (_receiver, url) = server.provide(mock_server.clone());
+        let url = server.provide(mock_server.clone());
 
         assert!(url.starts_with("https://gitlab.com/oauth/authorize"));
         assert!(url.contains("&redirect_uri=http://127.0.0.1:10000/capture/"))
