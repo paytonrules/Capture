@@ -14,7 +14,6 @@ impl OAuthProvider {
         let (send, token) = sync_channel(1);
 
         let server = server.token_sender(send);
-        //         let login_url = "https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=paytonrules.Capture://capture/&response_type=token&state=100&scope=api".to_string();
         let login_url = format!("https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=http://127.0.0.1:{}/capture/&response_type=token&state=100&scope=api",
                        server.port());
 
