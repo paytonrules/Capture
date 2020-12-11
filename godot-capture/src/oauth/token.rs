@@ -34,8 +34,10 @@ pub fn clear_token() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial(accesses_token)]
     fn get_token_errors_with_no_token() {
         clear_token();
 
@@ -48,6 +50,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(accesses_token)]
     fn get_token_returns_the_string_when_present() -> Result<(), TokenError> {
         clear_token();
         save_token("TOKEN".to_string());
