@@ -70,7 +70,7 @@ mod tests {
     }
 
     #[test]
-    #[serial]
+    #[serial(accesses_token)]
     fn launches_webserver_on_provide() {
         clear_token();
         let server = OAuthProvider::new();

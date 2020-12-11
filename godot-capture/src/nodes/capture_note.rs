@@ -197,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    #[serial]
+    #[serial(accesses_token)]
     fn when_a_token_is_present_create_storage() -> Result<(), Box<dyn std::error::Error>> {
         save_token("token".to_string());
 
@@ -208,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    #[serial]
+    #[serial(accesses_token)]
     fn when_a_token_is_not_present() -> Result<(), Box<dyn std::error::Error>> {
         clear_token();
         let storage = create_storage();
