@@ -25,7 +25,9 @@ godot_init!(init);
 pub extern "C" fn logged_in(fragment: *const c_char) {
     if !fragment.is_null() {
         if let Ok(fragment) = unsafe { CStr::from_ptr(fragment) }.to_str() {
-            save_access_token(fragment);
+            if let Err(err) = save_access_token(fragment) {
+                println!("Error saving access token {}, {}", fragment, err);
+            }
         }
     }
 }
@@ -37,7 +39,7 @@ fn save_access_token(fragment: &str) -> anyhow::Result<()> {
         .and_then(|pair| pair.split('=').nth(1))
     {
         Some(token) => {
-            save_token(token.to_string());
+            save_token(token.to_string(), 0);
             Ok(())
         }
         None => anyhow::bail!("Error parsing access token"),
@@ -47,17 +49,17 @@ fn save_access_token(fragment: &str) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oauth::{clear_token, get_token, TokenError};
+    use oauth::{clear_token, create_state_generator, get_token, TokenError};
     use serial_test::serial;
     use std::ffi::CString;
 
     #[test]
     #[serial(accesses_token)]
     fn test_logged_in_sets_access_token() -> Result<(), Box<dyn std::error::Error>> {
+        create_state_generator(|| 0)();
         clear_token();
 
-        let fragment =
-            CString::new("access_token=passed_in_token&token_type=<ignore>&state=<ignore>");
+        let fragment = CString::new("access_token=passed_in_token&token_type=<ignore>&state=0");
         logged_in(fragment?.as_ptr());
 
         assert_eq!("passed_in_token", get_token()?);

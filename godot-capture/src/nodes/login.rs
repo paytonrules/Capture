@@ -1,6 +1,7 @@
-use crate::oauth::{get_token, BuildError, OAuthProvider, RocketWebServer};
+use crate::oauth::{create_state_generator, get_token, BuildError, OAuthProvider, RocketWebServer};
 use gdnative::api::OS;
 use gdnative::prelude::*;
+use rand::prelude::*;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -75,7 +76,7 @@ fn initialize_mac_oauth() -> Result<String, Error> {
         .build()
         .map_err(|err| Error::OAuthError(err))?;
 
-    Ok(provider.provide(rocket))
+    Ok(provider.provide(rocket, create_state_generator(random)))
 }
 
 fn initialize_ios_oauth() -> Result<String, Error> {

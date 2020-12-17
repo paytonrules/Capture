@@ -38,15 +38,15 @@ fn capture() -> Html<&'static str> {
 struct Token {
     access_token: String,
     token_type: String,
-    state: String,
+    state: i16,
 }
 
 #[post("/save_token", data = "<token>")]
 fn save_token(
-    token_sender: State<SyncSender<String>>,
+    token_sender: State<SyncSender<(String, i16)>>,
     token: Form<Token>,
-) -> Result<(), std::sync::mpsc::SendError<String>> {
-    token_sender.send(token.access_token.clone())
+) -> Result<(), std::sync::mpsc::SendError<(String, i16)>> {
+    token_sender.send((token.access_token.clone(), token.state))
 }
 
 pub fn rocket(port: u16) -> rocket::Rocket {
@@ -57,6 +57,7 @@ pub fn rocket(port: u16) -> rocket::Rocket {
 
     rocket::custom(config).mount("/", routes![capture, save_token])
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,19 +89,19 @@ mod tests {
     }
 
     #[test]
-    fn posting_to_save_token_sends_the_token_to_the_channel(
+    fn posting_to_save_token_sends_the_token_and_state_to_the_channel(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (send, recv) = sync_channel(1);
+        let (send, recv) = sync_channel::<(String, i16)>(1);
         let rocket = rocket(8080).manage(send);
         let client = Client::new(rocket)?;
 
         let response = client
             .post("/save_token")
-            .body("access_token=token&state=ignore&token_type=ignore")
+            .body("access_token=token&state=200&token_type=ignore")
             .header(ContentType::Form)
             .dispatch();
 
-        assert_eq!(Ok("token".to_string()), recv.recv());
+        assert_eq!(Ok(("token".to_string(), 200)), recv.recv());
         assert_eq!(Status::Ok, response.status());
         Ok(())
     }

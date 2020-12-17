@@ -3,7 +3,7 @@ use std::sync::mpsc::SyncSender;
 use thiserror::Error;
 
 pub trait WebServer {
-    fn token_sender(self, sender: SyncSender<String>) -> Self;
+    fn token_sender(self, sender: SyncSender<(String, i16)>) -> Self;
     fn launch(self);
     fn port(&self) -> u16;
 }
@@ -44,7 +44,7 @@ impl RocketWebServer {
 }
 
 impl WebServer for RocketWebServer {
-    fn token_sender(self, sender: SyncSender<String>) -> Self {
+    fn token_sender(self, sender: SyncSender<(String, i16)>) -> Self {
         RocketWebServer {
             rocket: self.rocket.manage(sender),
         }
