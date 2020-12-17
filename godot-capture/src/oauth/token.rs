@@ -10,13 +10,52 @@ pub enum TokenError {
     #[error("No token present")]
     NoTokenPresent,
 
-    #[error("Oauth state param doesn't match")]
+    #[error("OAuth state param doesn't match")]
     StateDoesntMatch,
+
+    #[error("Can only authenticate once")]
+    AlreadyAuthenticated,
 }
 
 lazy_static! {
     static ref TOKEN: Mutex<Option<String>> = Mutex::new(None);
     static ref STATE: Mutex<Option<i16>> = Mutex::new(None);
+}
+
+#[derive(PartialEq, Debug)]
+enum AuthMachine {
+    UnAuthenticated(i16),
+    Authenticated(String),
+}
+
+impl AuthMachine {
+    pub fn new(rand: impl Fn() -> i16 + 'static) -> AuthMachine {
+        AuthMachine::UnAuthenticated(rand())
+    }
+
+    pub fn state(&self) -> Option<i16> {
+        match &self {
+            AuthMachine::UnAuthenticated(state) => Some(*state),
+            _ => None,
+        }
+    }
+
+    pub fn token_received(self, token: &str, state: i16) -> Result<AuthMachine, TokenError> {
+        match self {
+            AuthMachine::UnAuthenticated(actual_state) if state == actual_state => {
+                Ok(AuthMachine::Authenticated(token.to_string()))
+            }
+            AuthMachine::UnAuthenticated(_) => Err(TokenError::StateDoesntMatch),
+            AuthMachine::Authenticated(_) => Err(TokenError::AlreadyAuthenticated),
+        }
+    }
+
+    pub fn token(&self) -> Option<String> {
+        match &self {
+            AuthMachine::Authenticated(token) => Some(token.to_string()),
+            _ => None,
+        }
+    }
 }
 
 pub fn create_state_generator(rand: impl Fn() -> i16 + 'static) -> Box<dyn Fn() -> i16> {
@@ -97,5 +136,45 @@ mod tests {
         let val = create_state_generator(|| 900)();
 
         assert_eq!(val, 900);
+    }
+
+    #[test]
+    fn starts_with_state_value() {
+        let authentication = AuthMachine::new(|| 10);
+
+        assert_eq!(Some(10), authentication.state());
+        assert_eq!(None, authentication.token());
+    }
+
+    #[test]
+    fn authenticates_with_a_token() -> Result<(), TokenError> {
+        let authentication = AuthMachine::new(|| 20);
+
+        let authentication = authentication.token_received("TOKEN", 20)?;
+
+        assert_eq!(Some("TOKEN".to_string()), authentication.token());
+        assert_eq!(None, authentication.state());
+        Ok(())
+    }
+
+    #[test]
+    fn requires_state_to_match_to_authenticate_token() {
+        let authentication = AuthMachine::new(|| 20);
+
+        let authentication = authentication.token_received("TOKEN", 10);
+
+        assert_eq!(Err(TokenError::StateDoesntMatch), authentication);
+    }
+
+    #[test]
+    fn only_authenticates_once() -> Result<(), TokenError> {
+        let authentication = AuthMachine::new(|| 20);
+
+        let authentication = authentication
+            .token_received("TOKEN", 20)?
+            .token_received("TOKEN", 20);
+
+        assert_eq!(Err(TokenError::AlreadyAuthenticated), authentication);
+        Ok(())
     }
 }
