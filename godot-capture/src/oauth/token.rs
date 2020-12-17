@@ -1,4 +1,5 @@
 use lazy_static::lazy_static;
+use rand::random;
 use std::sync::Mutex;
 use thiserror::Error;
 
@@ -22,7 +23,7 @@ lazy_static! {
     static ref STATE: Mutex<Option<i16>> = Mutex::new(None);
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 enum AuthMachine {
     UnAuthenticated(i16),
     Authenticated(String),
@@ -55,6 +56,39 @@ impl AuthMachine {
             AuthMachine::Authenticated(token) => Some(token.to_string()),
             _ => None,
         }
+    }
+}
+
+lazy_static! {
+    static ref MACHINE: Mutex<AuthMachine> = Mutex::new(AuthMachine::new(random));
+}
+
+struct AuthState;
+
+impl AuthState {
+    pub fn new(machine: AuthMachine) -> AuthState {
+        *MACHINE.lock().unwrap() = machine;
+        AuthState
+    }
+
+    pub fn get() -> AuthState {
+        AuthState
+    }
+
+    pub fn state(&self) -> Option<i16> {
+        MACHINE.lock().unwrap().state()
+    }
+
+    pub fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError> {
+        let auth_machine = MACHINE.lock().unwrap().clone();
+        let updated_auth_machine = auth_machine.token_received(token, state)?;
+
+        *MACHINE.lock().unwrap() = updated_auth_machine;
+        Ok(())
+    }
+
+    pub fn token(&self) -> Option<String> {
+        MACHINE.lock().unwrap().token()
     }
 }
 
@@ -175,6 +209,34 @@ mod tests {
             .token_received("TOKEN", 20);
 
         assert_eq!(Err(TokenError::AlreadyAuthenticated), authentication);
+        Ok(())
+    }
+
+    #[test]
+    #[serial(using_auth_state)]
+    fn new_auth_state_starts_with_state() {
+        let auth_state = AuthState::new(AuthMachine::new(|| 20));
+
+        assert_eq!(Some(20), auth_state.state());
+    }
+
+    #[test]
+    #[serial(using_auth_state)]
+    fn retrieve_existing_auth_state() {
+        let auth_state = AuthState::new(AuthMachine::new(|| 40));
+        let auth_state = AuthState::get();
+
+        assert_eq!(Some(40), auth_state.state());
+    }
+
+    #[test]
+    #[serial(using_auth_state)]
+    fn valid_token_recieved_saves_the_token() -> Result<(), TokenError> {
+        let auth_state = AuthState::new(AuthMachine::new(|| 100));
+
+        AuthState::get().token_received("THE TOKEN", 100)?;
+
+        assert_eq!(Some("THE TOKEN".to_string()), AuthState::get().token());
         Ok(())
     }
 }
