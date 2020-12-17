@@ -151,7 +151,7 @@ fn save_new_reminder<T: Storage>(inbox: &mut Inbox<T>, reminder: &str) -> Result
 mod tests {
     use super::*;
     use crate::inbox::{MockError, MockStorage};
-    use crate::oauth::{clear_token, save_token};
+    use crate::oauth::{clear_token, create_state_generator, save_token};
     use serial_test::serial;
     use std::rc::Rc;
 
@@ -199,7 +199,8 @@ mod tests {
     #[test]
     #[serial(accesses_token)]
     fn when_a_token_is_present_create_storage() -> Result<(), Box<dyn std::error::Error>> {
-        save_token("token".to_string());
+        create_state_generator(|| 0)();
+        save_token("token".to_string(), 0);
 
         let storage = create_storage()?;
 
