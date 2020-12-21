@@ -76,7 +76,8 @@ fn initialize_mac_oauth() -> Result<String, Error> {
         .build()
         .map_err(|err| Error::OAuthError(err))?;
 
-    Ok(provider.provide(rocket, create_state_generator(random)))
+    //    Ok(provider.provide(rocket, create_state_generator(random)))
+    Ok("http://www.google.com".to_string())
 }
 
 fn initialize_ios_oauth() -> Result<String, Error> {

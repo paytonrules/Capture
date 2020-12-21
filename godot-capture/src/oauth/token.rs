@@ -23,6 +23,11 @@ lazy_static! {
     static ref STATE: Mutex<Option<i16>> = Mutex::new(None);
 }
 
+pub trait TokenReceiver {
+    fn state(&self) -> Option<i16>;
+    fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError>;
+}
+
 #[derive(PartialEq, Debug, Clone)]
 enum AuthMachine {
     UnAuthenticated(i16),
@@ -66,7 +71,7 @@ lazy_static! {
 struct AuthState;
 
 impl AuthState {
-    pub fn new(machine: AuthMachine) -> AuthState {
+    fn new(machine: AuthMachine) -> AuthState {
         *MACHINE.lock().unwrap() = machine;
         AuthState
     }
@@ -75,20 +80,22 @@ impl AuthState {
         AuthState
     }
 
-    pub fn state(&self) -> Option<i16> {
+    pub fn token(&self) -> Option<String> {
+        MACHINE.lock().unwrap().token()
+    }
+}
+
+impl TokenReceiver for AuthState {
+    fn state(&self) -> Option<i16> {
         MACHINE.lock().unwrap().state()
     }
 
-    pub fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError> {
+    fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError> {
         let auth_machine = MACHINE.lock().unwrap().clone();
         let updated_auth_machine = auth_machine.token_received(token, state)?;
 
         *MACHINE.lock().unwrap() = updated_auth_machine;
         Ok(())
-    }
-
-    pub fn token(&self) -> Option<String> {
-        MACHINE.lock().unwrap().token()
     }
 }
 
@@ -126,51 +133,6 @@ pub fn clear_token() {
 mod tests {
     use super::*;
     use serial_test::serial;
-
-    #[test]
-    #[serial(accesses_token)]
-    fn get_token_errors_with_no_token() {
-        clear_token();
-
-        let result = get_token();
-
-        match result {
-            Ok(_) => assert!(false, "Expected a failure, got an Ok"),
-            Err(err) => assert_eq!(err, TokenError::NoTokenPresent),
-        }
-    }
-
-    #[test]
-    #[serial(accesses_token)]
-    fn get_token_returns_the_string_when_present() -> Result<(), TokenError> {
-        clear_token();
-        create_state_generator(|| 0)();
-        save_token("TOKEN".to_string(), 0);
-
-        let token = get_token()?;
-
-        assert_eq!(token, "TOKEN");
-        Ok(())
-    }
-
-    #[test]
-    #[serial(accesses_token)]
-    fn save_token_fails_when_the_state_doesnt_match() {
-        create_state_generator(|| 900)();
-
-        assert_eq!(
-            TokenError::StateDoesntMatch,
-            save_token("TOKEN".to_string(), 1000).unwrap_err()
-        );
-    }
-
-    #[test]
-    #[serial(accesses_token)]
-    fn state_generator_returns_the_generated_val() {
-        let val = create_state_generator(|| 900)();
-
-        assert_eq!(val, 900);
-    }
 
     #[test]
     fn starts_with_state_value() {
