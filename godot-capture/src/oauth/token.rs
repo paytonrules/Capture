@@ -16,6 +16,9 @@ pub enum TokenError {
 
     #[error("Can only authenticate once")]
     AlreadyAuthenticated,
+
+    #[error("No state value is present, are you already authenticated?")]
+    NoStatePresent,
 }
 
 lazy_static! {

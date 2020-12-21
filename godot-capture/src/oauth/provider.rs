@@ -1,6 +1,5 @@
-use super::save_token;
 use super::webserver::WebServer;
-use super::TokenReceiver;
+use super::{TokenError, TokenReceiver};
 use std::sync::mpsc::sync_channel;
 use std::thread;
 
@@ -11,7 +10,7 @@ impl OAuthProvider {
         OAuthProvider
     }
 
-    pub fn provide<T, U>(&self, server: T, token_receiver: U) -> String
+    pub fn provide<T, U>(&self, server: T, token_receiver: U) -> Result<String, TokenError>
     where
         T: WebServer + Send + Sync + 'static,
         U: TokenReceiver + Send + 'static,
@@ -19,7 +18,7 @@ impl OAuthProvider {
         let (send, token) = sync_channel(1);
 
         let server = server.token_sender(send);
-        let state = token_receiver.state().unwrap();
+        let state = token_receiver.state().ok_or(TokenError::NoStatePresent)?;
         let login_url = format!("https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=http://127.0.0.1:{}/capture/&response_type=token&state={}&scope=api",
                        server.port(), state);
 
@@ -33,7 +32,7 @@ impl OAuthProvider {
             }
         });
 
-        login_url
+        Ok(login_url)
     }
 }
 
@@ -80,7 +79,7 @@ mod tests {
     }
 
     struct MockTokenReceiver {
-        state: i16,
+        state: Option<i16>,
         received_token: Mutex<RefCell<Option<String>>>,
         received_state: Mutex<RefCell<Option<i16>>>,
     }
@@ -88,7 +87,15 @@ mod tests {
     impl MockTokenReceiver {
         fn new(state: i16) -> Self {
             MockTokenReceiver {
-                state,
+                state: Some(state),
+                received_token: Mutex::new(RefCell::new(None)),
+                received_state: Mutex::new(RefCell::new(None)),
+            }
+        }
+
+        fn no_state_present() -> Self {
+            MockTokenReceiver {
+                state: None,
                 received_token: Mutex::new(RefCell::new(None)),
                 received_state: Mutex::new(RefCell::new(None)),
             }
@@ -105,7 +112,7 @@ mod tests {
 
     impl TokenReceiver for Arc<MockTokenReceiver> {
         fn state(&self) -> Option<i16> {
-            Some(self.state)
+            self.state
         }
 
         fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError> {
@@ -128,40 +135,54 @@ mod tests {
     }
 
     #[test]
-    fn returns_url_for_login_on_provide_with_port() {
+    fn returns_url_for_login_on_provide_with_port() -> Result<(), TokenError> {
         let token_receiver = Arc::new(MockTokenReceiver::new(1));
         let server = OAuthProvider::new();
         let mut mock_server = MocketWrapper::new();
         mock_server.port = 10000;
 
-        let url = server.provide(mock_server.clone(), Arc::clone(&token_receiver));
+        let url = server.provide(mock_server.clone(), Arc::clone(&token_receiver))?;
 
         assert!(url.starts_with("https://gitlab.com/oauth/authorize"));
-        assert!(url.contains("&redirect_uri=http://127.0.0.1:10000/capture/"))
+        assert!(url.contains("&redirect_uri=http://127.0.0.1:10000/capture/"));
+        Ok(())
     }
 
     #[test]
-    fn includes_the_generated_state_in_the_url() {
+    fn includes_the_generated_state_in_the_url() -> Result<(), TokenError> {
         let state = 894;
         let token_receiver = Arc::new(MockTokenReceiver::new(state));
         let server = OAuthProvider::new();
         let mock_server = MocketWrapper::new();
 
-        let url = server.provide(mock_server.clone(), Arc::clone(&token_receiver));
+        let url = server.provide(mock_server.clone(), Arc::clone(&token_receiver))?;
 
-        assert!(url.contains(format!("&state={}", state).as_str()))
+        assert!(url.contains(format!("&state={}", state).as_str()));
+        Ok(())
     }
 
     #[test]
-    fn uses_the_state_from_the_webserver_when_saving_token() {
+    fn does_not_provide_the_url_when_the_state_is_not_present() {
+        let token_receiver = Arc::new(MockTokenReceiver::no_state_present());
+        let server = OAuthProvider::new();
+        let mock_server = MocketWrapper::new();
+
+        let url = server.provide(mock_server.clone(), Arc::clone(&token_receiver));
+
+        assert_eq!(Err(TokenError::NoStatePresent), url);
+    }
+
+    #[test]
+    fn uses_the_state_from_the_webserver_when_saving_token() -> Result<(), TokenError> {
         let mismatched_state = STATE + 1;
         let token_receiver = Arc::new(MockTokenReceiver::new(mismatched_state));
         let server = OAuthProvider::new();
         let mock_server = MocketWrapper::new();
 
-        server.provide(mock_server.clone(), Arc::clone(&token_receiver));
+        server.provide(mock_server.clone(), Arc::clone(&token_receiver))?;
         std::thread::sleep(std::time::Duration::from_millis(10));
 
-        assert_eq!(Some(STATE), token_receiver.received_state())
+        assert_eq!(Some(STATE), token_receiver.received_state());
+        Ok(())
     }
 }
