@@ -31,7 +31,7 @@ pub trait TokenRetriever {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-enum AuthMachine {
+pub enum AuthMachine {
     UnAuthenticated(i16),
     Authenticated(String),
 }
@@ -73,9 +73,13 @@ lazy_static! {
 pub struct AuthState;
 
 impl AuthState {
-    fn new(machine: AuthMachine) -> AuthState {
-        *MACHINE.lock().unwrap() = machine;
+    fn new(machine: AuthMachine) -> Self {
+        AuthState::initialize(machine);
         AuthState
+    }
+
+    pub fn initialize(machine: AuthMachine) {
+        *MACHINE.lock().unwrap() = machine;
     }
 
     pub fn get() -> AuthState {

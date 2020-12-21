@@ -1,4 +1,6 @@
-use crate::oauth::{create_state_generator, get_token, BuildError, OAuthProvider, RocketWebServer};
+use crate::oauth::{
+    AuthMachine, AuthState, BuildError, OAuthProvider, RocketWebServer, TokenRetriever,
+};
 use gdnative::api::OS;
 use gdnative::prelude::*;
 use rand::prelude::*;
@@ -9,8 +11,11 @@ enum Error {
     #[error("Attempting to run Capture on unsupported platform")]
     UnsupportedPlatform,
 
-    #[error("Error setting up OAuth {0}")]
+    #[error("Error building Rocket Server for OAuth {0}")]
     OAuthError(BuildError),
+
+    #[error("Error providing token for OAuth {0}")]
+    TokenError(crate::oauth::TokenError),
 }
 
 #[derive(NativeClass)]
@@ -27,6 +32,7 @@ impl Login {
 
     #[export]
     fn _ready(&mut self, _owner: TRef<Node>) {
+        AuthState::initialize(AuthMachine::new(random));
         let login_url = match OS::godot_singleton().get_name().to_string().as_str() {
             "OSX" => Ok(initialize_mac_oauth as fn() -> Result<String, Error>),
             "iOS" => Ok(initialize_ios_oauth as fn() -> Result<String, Error>),
@@ -51,7 +57,7 @@ impl Login {
 
     #[export]
     fn _process(&self, owner: TRef<Node>, _delta: f64) {
-        if let Ok(_) = get_token() {
+        if let Some(_) = AuthState::get().token() {
             self.token_received(owner)
         }
     }
@@ -76,8 +82,9 @@ fn initialize_mac_oauth() -> Result<String, Error> {
         .build()
         .map_err(|err| Error::OAuthError(err))?;
 
-    //    Ok(provider.provide(rocket, create_state_generator(random)))
-    Ok("http://www.google.com".to_string())
+    provider
+        .provide(rocket, AuthState::get())
+        .map_err(|err| Error::TokenError(err))
 }
 
 fn initialize_ios_oauth() -> Result<String, Error> {
