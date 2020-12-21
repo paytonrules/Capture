@@ -21,14 +21,13 @@ pub enum TokenError {
     NoStatePresent,
 }
 
-lazy_static! {
-    static ref TOKEN: Mutex<Option<String>> = Mutex::new(None);
-    static ref STATE: Mutex<Option<i16>> = Mutex::new(None);
-}
-
 pub trait TokenReceiver {
     fn state(&self) -> Option<i16>;
     fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError>;
+}
+
+pub trait TokenRetriever {
+    fn token(&self) -> Option<String>;
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -71,7 +70,7 @@ lazy_static! {
     static ref MACHINE: Mutex<AuthMachine> = Mutex::new(AuthMachine::new(random));
 }
 
-struct AuthState;
+pub struct AuthState;
 
 impl AuthState {
     fn new(machine: AuthMachine) -> AuthState {
@@ -82,8 +81,10 @@ impl AuthState {
     pub fn get() -> AuthState {
         AuthState
     }
+}
 
-    pub fn token(&self) -> Option<String> {
+impl TokenRetriever for AuthState {
+    fn token(&self) -> Option<String> {
         MACHINE.lock().unwrap().token()
     }
 }
@@ -100,6 +101,11 @@ impl TokenReceiver for AuthState {
         *MACHINE.lock().unwrap() = updated_auth_machine;
         Ok(())
     }
+}
+
+lazy_static! {
+    static ref TOKEN: Mutex<Option<String>> = Mutex::new(None);
+    static ref STATE: Mutex<Option<i16>> = Mutex::new(None);
 }
 
 pub fn create_state_generator(rand: impl Fn() -> i16 + 'static) -> Box<dyn Fn() -> i16> {

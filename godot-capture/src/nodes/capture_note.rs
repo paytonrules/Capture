@@ -1,13 +1,14 @@
 use crate::inbox::{GitlabStorage, Inbox, InboxError, Storage};
-use crate::oauth::{get_token, TokenError};
+use crate::oauth::AuthState;
+use crate::oauth::TokenRetriever;
 use gdnative::api::{AcceptDialog, TextEdit, TextureButton};
 use gdnative::prelude::*;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CaptureError {
-    #[error("Token Not Available: {0}")]
-    TokenFailure(#[from] TokenError),
+    #[error("Token Not Available")]
+    TokenFailure,
 
     #[error("Error getting inbox: {0}")]
     ErrorGettingInbox(#[from] InboxError),
@@ -27,7 +28,7 @@ impl Remember {
 
     #[export]
     fn _ready(&mut self, owner: TRef<TextureButton>) {
-        self.inbox = create_storage()
+        self.inbox = create_storage(&AuthState::get())
             .and_then(|storage| load_inbox(storage))
             .or_else(|err| {
                 display_error(owner, &err);
@@ -132,8 +133,11 @@ fn truncate_to_latest_reminders(all_reminders: &str) -> String {
     }
 }
 
-fn create_storage() -> Result<GitlabStorage, CaptureError> {
-    let token = get_token().map_err(|err| CaptureError::TokenFailure(err))?;
+fn create_storage<T>(token_retriever: &T) -> Result<GitlabStorage, CaptureError>
+where
+    T: TokenRetriever,
+{
+    let token = token_retriever.token().ok_or(CaptureError::TokenFailure)?;
 
     Ok(GitlabStorage::new(token.to_string()))
 }
@@ -151,8 +155,7 @@ fn save_new_reminder<T: Storage>(inbox: &mut Inbox<T>, reminder: &str) -> Result
 mod tests {
     use super::*;
     use crate::inbox::{MockError, MockStorage};
-    use crate::oauth::{clear_token, create_state_generator, save_token};
-    use serial_test::serial;
+    use crate::oauth::TokenRetriever;
     use std::rc::Rc;
 
     #[test]
@@ -196,26 +199,45 @@ mod tests {
         assert_eq!(expected, truncate_to_latest_reminders(&full_list));
     }
 
-    #[test]
-    #[serial(accesses_token)]
-    fn when_a_token_is_present_create_storage() -> Result<(), Box<dyn std::error::Error>> {
-        create_state_generator(|| 0)();
-        save_token("token".to_string(), 0);
+    struct StubTokenRetriever {
+        token: Option<String>,
+    }
 
-        let storage = create_storage()?;
+    impl StubTokenRetriever {
+        fn new_with_token(token: &str) -> Self {
+            StubTokenRetriever {
+                token: Some(token.to_owned()),
+            }
+        }
+
+        fn new_without_token() -> Self {
+            StubTokenRetriever { token: None }
+        }
+    }
+
+    impl TokenRetriever for StubTokenRetriever {
+        fn token(&self) -> Option<String> {
+            self.token.clone()
+        }
+    }
+
+    #[test]
+    fn when_a_token_is_present_create_storage() -> Result<(), Box<dyn std::error::Error>> {
+        let token_retriever = StubTokenRetriever::new_with_token("token");
+
+        let storage = create_storage(&token_retriever)?;
 
         assert_eq!("token", storage.token);
         Ok(())
     }
 
     #[test]
-    #[serial(accesses_token)]
     fn when_a_token_is_not_present() -> Result<(), Box<dyn std::error::Error>> {
-        clear_token();
-        let storage = create_storage();
+        let token_retriever = StubTokenRetriever::new_without_token();
+        let storage = create_storage(&token_retriever);
 
         match storage {
-            Err(CaptureError::TokenFailure(_)) => assert!(true, "correct error"),
+            Err(CaptureError::TokenFailure) => assert!(true, "correct error"),
             Ok(token) => assert!(false, println!("unexpected Ok result - {:?}", token)),
             Err(err) => assert!(false, println!("unexpected error thrown {:?}", err)),
         }
