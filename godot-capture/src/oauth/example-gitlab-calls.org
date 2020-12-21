@@ -1,5 +1,4 @@
 * Example Rest API calls
-fFsGsR7Mf6TfCoks2-_r
 
 #+NAME: org_project
 #+BEGIN_SRC restclient :pretty
