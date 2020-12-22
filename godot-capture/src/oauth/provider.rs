@@ -39,12 +39,11 @@ impl OAuthProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oauth::mock_token_receiver::MockTokenReceiver;
     use crate::oauth::*;
-    use serial_test::serial;
     use std::cell::RefCell;
     use std::sync::mpsc::SyncSender;
-    use std::sync::Arc;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     const STATE: i16 = 1;
     #[derive(Clone)]
@@ -75,50 +74,6 @@ mod tests {
 
         fn port(&self) -> u16 {
             self.port
-        }
-    }
-
-    struct MockTokenReceiver {
-        state: Option<i16>,
-        received_token: Mutex<RefCell<Option<String>>>,
-        received_state: Mutex<RefCell<Option<i16>>>,
-    }
-
-    impl MockTokenReceiver {
-        fn new(state: i16) -> Self {
-            MockTokenReceiver {
-                state: Some(state),
-                received_token: Mutex::new(RefCell::new(None)),
-                received_state: Mutex::new(RefCell::new(None)),
-            }
-        }
-
-        fn no_state_present() -> Self {
-            MockTokenReceiver {
-                state: None,
-                received_token: Mutex::new(RefCell::new(None)),
-                received_state: Mutex::new(RefCell::new(None)),
-            }
-        }
-
-        fn received_token(&self) -> Option<String> {
-            (*self.received_token.lock().unwrap().borrow()).clone()
-        }
-
-        fn received_state(&self) -> Option<i16> {
-            (*self.received_state.lock().unwrap().borrow()).clone()
-        }
-    }
-
-    impl TokenReceiver for Arc<MockTokenReceiver> {
-        fn state(&self) -> Option<i16> {
-            self.state
-        }
-
-        fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError> {
-            *self.received_token.lock().unwrap().borrow_mut() = Some(token.to_string());
-            *self.received_state.lock().unwrap().borrow_mut() = Some(state);
-            Ok(())
         }
     }
 
