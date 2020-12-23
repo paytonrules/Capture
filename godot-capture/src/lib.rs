@@ -1,14 +1,11 @@
 #![feature(proc_macro_hygiene, decl_macro)]
-
-mod inbox;
 mod nodes;
-mod oauth;
 
 use gdnative::prelude::*;
 use itertools::Itertools;
 use nodes::capture_note::Remember;
 use nodes::login::Login;
-use oauth::{AuthState, TokenError, TokenReceiver};
+use nodes::oauth::{AuthState, TokenError, TokenReceiver};
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::num::ParseIntError;
@@ -92,9 +89,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::nodes::oauth::mock_token_receiver::MockTokenReceiver;
+    use super::nodes::oauth::TokenError;
     use super::*;
-    use oauth::mock_token_receiver::MockTokenReceiver;
-    use oauth::TokenError;
     use std::ffi::CString;
     use std::rc::Rc;
 

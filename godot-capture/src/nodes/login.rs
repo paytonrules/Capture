@@ -1,6 +1,6 @@
-use crate::oauth::TokenReceiver;
-use crate::oauth::{
-    AuthMachine, AuthState, BuildError, OAuthProvider, RocketWebServer, TokenRetriever,
+use super::oauth::{
+    AuthMachine, AuthState, BuildError, OAuthProvider, RocketWebServer, TokenReceiver,
+    TokenRetriever,
 };
 use gdnative::api::OS;
 use gdnative::prelude::*;
@@ -16,7 +16,7 @@ enum Error {
     OAuthError(BuildError),
 
     #[error("Error providing token for OAuth {0}")]
-    TokenError(crate::oauth::TokenError),
+    TokenError(super::oauth::TokenError),
 }
 
 #[derive(NativeClass)]
@@ -91,6 +91,6 @@ fn initialize_mac_oauth() -> Result<String, Error> {
 fn initialize_ios_oauth() -> Result<String, Error> {
     let state = AuthState::get()
         .state()
-        .ok_or(Error::TokenError(crate::oauth::TokenError::NoStatePresent))?;
+        .ok_or(Error::TokenError(super::oauth::TokenError::NoStatePresent))?;
     Ok(format!("https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=paytonrules.Capture://capture/&response_type=token&state={}&scope=api", state))
 }

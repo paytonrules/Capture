@@ -46,8 +46,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::super::{MockError, MockStorage};
     use super::*;
-    use crate::inbox::mock_storage::{MockError, MockStorage};
     use std::rc::Rc;
 
     #[test]
