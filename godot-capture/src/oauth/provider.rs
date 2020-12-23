@@ -41,9 +41,8 @@ mod tests {
     use super::*;
     use crate::oauth::mock_token_receiver::MockTokenReceiver;
     use crate::oauth::*;
-    use std::cell::RefCell;
     use std::sync::mpsc::SyncSender;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     const STATE: i16 = 1;
     #[derive(Clone)]

@@ -20,7 +20,7 @@ impl<T> Inbox<T>
 where
     T: Storage,
 {
-    pub fn new(storage: T) -> Self {
+    fn new(storage: T) -> Self {
         Inbox {
             storage,
             reminders: "".to_string(),
@@ -28,13 +28,12 @@ where
     }
 
     pub fn load(storage: T) -> Result<Self, InboxError> {
-        let inbox = storage
+        let reminders = storage
             .load()
             .map_err(|err| InboxError::FailedToLoad(err))?;
-        Ok(Inbox {
-            storage,
-            reminders: inbox.trim().to_string(),
-        })
+        let mut inbox = Inbox::new(storage);
+        inbox.reminders = reminders.trim().to_string();
+        Ok(inbox)
     }
 
     pub fn save(&mut self, note: &String) -> Result<(), InboxError> {

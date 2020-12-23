@@ -5,12 +5,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum TokenError {
-    #[error("Unable to get token lock {0}")]
-    FailedToLockToken(String),
-
-    #[error("No token present")]
-    NoTokenPresent,
-
     #[error("OAuth state param doesn't match")]
     StateDoesntMatch,
 
@@ -107,41 +101,6 @@ impl TokenReceiver for AuthState {
     }
 }
 
-lazy_static! {
-    static ref TOKEN: Mutex<Option<String>> = Mutex::new(None);
-    static ref STATE: Mutex<Option<i16>> = Mutex::new(None);
-}
-
-pub fn create_state_generator(rand: impl Fn() -> i16 + 'static) -> Box<dyn Fn() -> i16> {
-    Box::new(move || {
-        let val = rand();
-        *STATE.lock().unwrap() = Some(val);
-        val
-    })
-}
-
-pub fn save_token(token: String, state: i16) -> Result<(), TokenError> {
-    match *STATE.lock().unwrap() {
-        Some(actual_state) if actual_state == state => {
-            *TOKEN.lock().unwrap() = Some(token);
-            Ok(())
-        }
-        _ => Err(TokenError::StateDoesntMatch),
-    }
-}
-
-pub fn get_token() -> Result<String, TokenError> {
-    TOKEN
-        .try_lock()
-        .map_err(|err| TokenError::FailedToLockToken(err.to_string()))?
-        .clone()
-        .ok_or(TokenError::NoTokenPresent)
-}
-
-pub fn clear_token() {
-    *TOKEN.lock().unwrap() = None;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,7 +157,7 @@ mod tests {
     #[test]
     #[serial(using_auth_state)]
     fn retrieve_existing_auth_state() {
-        let auth_state = AuthState::new(AuthMachine::new(|| 40));
+        let _auth_state = AuthState::new(AuthMachine::new(|| 40));
         let auth_state = AuthState::get();
 
         assert_eq!(Some(40), auth_state.state());
@@ -207,7 +166,7 @@ mod tests {
     #[test]
     #[serial(using_auth_state)]
     fn valid_token_recieved_saves_the_token() -> Result<(), TokenError> {
-        let auth_state = AuthState::new(AuthMachine::new(|| 100));
+        let _auth_state = AuthState::new(AuthMachine::new(|| 100));
 
         AuthState::get().token_received("THE TOKEN", 100)?;
 

@@ -38,9 +38,6 @@ enum LoginError {
     #[error("Fragment is null")]
     NullFragment,
 
-    #[error("Fragment is invalid {0}")]
-    InvalidAuthFragment(String),
-
     #[error("Cannot convert the passed in fragment to a string, should be impossible {0}")]
     CannotConvertFragmentToString(Utf8Error),
 
@@ -97,7 +94,7 @@ where
 mod tests {
     use super::*;
     use oauth::mock_token_receiver::MockTokenReceiver;
-    use oauth::{clear_token, create_state_generator, get_token, TokenError};
+    use oauth::TokenError;
     use std::ffi::CString;
     use std::rc::Rc;
 
