@@ -41,9 +41,13 @@ impl TokenReceiver for Arc<MockTokenReceiver> {
     }
 
     fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError> {
-        *self.received_token.lock().unwrap().borrow_mut() = Some(token.to_string());
         *self.received_state.lock().unwrap().borrow_mut() = Some(state);
-        Ok(())
+        if self.state == Some(state) {
+            *self.received_token.lock().unwrap().borrow_mut() = Some(token.to_string());
+            Ok(())
+        } else {
+            Err(TokenError::StateDoesntMatch)
+        }
     }
 }
 
@@ -53,8 +57,12 @@ impl TokenReceiver for Rc<MockTokenReceiver> {
     }
 
     fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError> {
-        *self.received_token.lock().unwrap().borrow_mut() = Some(token.to_string());
         *self.received_state.lock().unwrap().borrow_mut() = Some(state);
-        Ok(())
+        if self.state == Some(state) {
+            *self.received_token.lock().unwrap().borrow_mut() = Some(token.to_string());
+            Ok(())
+        } else {
+            Err(TokenError::StateDoesntMatch)
+        }
     }
 }
