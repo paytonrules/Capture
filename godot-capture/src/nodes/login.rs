@@ -1,3 +1,4 @@
+use crate::oauth::TokenReceiver;
 use crate::oauth::{
     AuthMachine, AuthState, BuildError, OAuthProvider, RocketWebServer, TokenRetriever,
 };
@@ -88,5 +89,8 @@ fn initialize_mac_oauth() -> Result<String, Error> {
 }
 
 fn initialize_ios_oauth() -> Result<String, Error> {
-    Ok("https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=paytonrules.Capture://capture/&response_type=token&state=100&scope=api".to_string())
+    let state = AuthState::get()
+        .state()
+        .ok_or(Error::TokenError(crate::oauth::TokenError::NoStatePresent))?;
+    Ok(format!("https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=paytonrules.Capture://capture/&response_type=token&state={}&scope=api", state))
 }
