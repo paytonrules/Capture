@@ -152,9 +152,9 @@ fn save_new_reminder<T: Storage>(inbox: &mut Inbox<T>, reminder: &str) -> Result
 
 #[cfg(test)]
 mod tests {
-    use super::super::oauth::TokenRetriever;
     use super::*;
     use crate::nodes::inbox::storage::tests::{MockError, MockStorage};
+    use crate::nodes::oauth::TokenRetriever;
     use std::rc::Rc;
 
     #[test]
