@@ -1,6 +1,5 @@
-use super::inbox::{GitlabStorage, Inbox, InboxError, Storage};
-use super::oauth::AuthState;
-use super::oauth::TokenRetriever;
+use crate::nodes::inbox::{GitlabStorage, Inbox, InboxError, Storage};
+use crate::nodes::oauth::{AuthState, TokenRetriever};
 use gdnative::api::{AcceptDialog, TextEdit, TextureButton};
 use gdnative::prelude::*;
 use thiserror::Error;
@@ -153,9 +152,9 @@ fn save_new_reminder<T: Storage>(inbox: &mut Inbox<T>, reminder: &str) -> Result
 
 #[cfg(test)]
 mod tests {
-    use super::super::inbox::{MockError, MockStorage};
     use super::super::oauth::TokenRetriever;
     use super::*;
+    use crate::nodes::inbox::storage::tests::{MockError, MockStorage};
     use std::rc::Rc;
 
     #[test]

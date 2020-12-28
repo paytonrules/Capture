@@ -67,11 +67,6 @@ lazy_static! {
 pub struct AuthState;
 
 impl AuthState {
-    fn new(machine: AuthMachine) -> Self {
-        AuthState::initialize(machine);
-        AuthState
-    }
-
     pub fn initialize(machine: AuthMachine) {
         *MACHINE.lock().unwrap() = machine;
     }
@@ -102,9 +97,12 @@ impl TokenReceiver for AuthState {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use serial_test::serial;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn starts_with_state_value() {
@@ -146,6 +144,13 @@ mod tests {
         Ok(())
     }
 
+    impl AuthState {
+        fn new(machine: AuthMachine) -> Self {
+            AuthState::initialize(machine);
+            AuthState
+        }
+    }
+
     #[test]
     #[serial(using_auth_state)]
     fn new_auth_state_starts_with_state() {
@@ -172,5 +177,69 @@ mod tests {
 
         assert_eq!(Some("THE TOKEN".to_string()), AuthState::get().token());
         Ok(())
+    }
+
+    pub struct MockTokenReceiver {
+        state: Option<i16>,
+        received_token: Mutex<RefCell<Option<String>>>,
+        received_state: Mutex<RefCell<Option<i16>>>,
+    }
+
+    impl MockTokenReceiver {
+        pub fn new(state: i16) -> Self {
+            MockTokenReceiver {
+                state: Some(state),
+                received_token: Mutex::new(RefCell::new(None)),
+                received_state: Mutex::new(RefCell::new(None)),
+            }
+        }
+
+        pub fn no_state_present() -> Self {
+            MockTokenReceiver {
+                state: None,
+                received_token: Mutex::new(RefCell::new(None)),
+                received_state: Mutex::new(RefCell::new(None)),
+            }
+        }
+
+        pub fn received_token(&self) -> Option<String> {
+            (*self.received_token.lock().unwrap().borrow()).clone()
+        }
+
+        pub fn received_state(&self) -> Option<i16> {
+            (*self.received_state.lock().unwrap().borrow()).clone()
+        }
+    }
+
+    impl TokenReceiver for Arc<MockTokenReceiver> {
+        fn state(&self) -> Option<i16> {
+            self.state
+        }
+
+        fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError> {
+            *self.received_state.lock().unwrap().borrow_mut() = Some(state);
+            if self.state == Some(state) {
+                *self.received_token.lock().unwrap().borrow_mut() = Some(token.to_string());
+                Ok(())
+            } else {
+                Err(TokenError::StateDoesntMatch)
+            }
+        }
+    }
+
+    impl TokenReceiver for Rc<MockTokenReceiver> {
+        fn state(&self) -> Option<i16> {
+            self.state
+        }
+
+        fn token_received(&self, token: &str, state: i16) -> Result<(), TokenError> {
+            *self.received_state.lock().unwrap().borrow_mut() = Some(state);
+            if self.state == Some(state) {
+                *self.received_token.lock().unwrap().borrow_mut() = Some(token.to_string());
+                Ok(())
+            } else {
+                Err(TokenError::StateDoesntMatch)
+            }
+        }
     }
 }

@@ -89,9 +89,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::nodes::oauth::mock_token_receiver::MockTokenReceiver;
-    use super::nodes::oauth::TokenError;
     use super::*;
+    use crate::nodes::oauth::token::tests::MockTokenReceiver;
+    use crate::nodes::oauth::TokenError;
     use std::ffi::CString;
     use std::rc::Rc;
 

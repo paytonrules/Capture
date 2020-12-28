@@ -38,8 +38,8 @@ impl OAuthProvider {
 
 #[cfg(test)]
 mod tests {
-    use super::super::mock_token_receiver::MockTokenReceiver;
     use super::*;
+    use crate::nodes::oauth::token::tests::MockTokenReceiver;
     use std::sync::mpsc::SyncSender;
     use std::sync::Arc;
 
