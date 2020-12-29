@@ -82,6 +82,7 @@ fn initialize_mac_oauth() -> Result<String, Error> {
         .port(port)
         .build()
         .map_err(|err| Error::OAuthError(err))?;
+    godot_print!("server on port {:?}", port);
 
     provider
         .provide(rocket, AuthState::get())
