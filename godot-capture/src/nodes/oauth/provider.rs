@@ -27,8 +27,11 @@ impl OAuthProvider {
         });
 
         thread::spawn(move || {
-            if let Ok((token, returned_state)) = token.recv() {
-                token_receiver.token_received(token.as_str(), returned_state);
+            while let Ok((token, returned_state)) = token.recv() {
+                match token_receiver.token_received(token.as_str(), returned_state) {
+                    Ok(_) => break,
+                    Err(err) => eprintln!("Error receiving token {:?}", err),
+                }
             }
         });
 
@@ -149,6 +152,24 @@ mod tests {
         mock_server.send_token_and_state("irrelevant", state_from_url);
 
         assert_eq!(Some(state_from_url), token_receiver.received_state());
+        Ok(())
+    }
+
+    #[test]
+    fn when_state_doesnt_match_keep_listening() -> Result<(), TokenError> {
+        let desired_state = STATE;
+        let mismatched_state = STATE + 1;
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(desired_state));
+        let server = OAuthProvider::new();
+        let mock_server = Arc::new(MocketWrapper::new());
+
+        server.provide(Arc::clone(&mock_server), Arc::clone(&token_receiver))?;
+
+        mock_server.send_token_and_state("token", mismatched_state);
+        assert_eq!(None, token_receiver.received_token());
+
+        mock_server.send_token_and_state("token", desired_state);
+        assert_eq!(Some("token".to_string()), token_receiver.received_token());
         Ok(())
     }
 }
