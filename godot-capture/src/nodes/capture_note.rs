@@ -273,12 +273,12 @@ mod tests {
 
     #[test]
     fn save_new_todo_saves() -> Result<(), Box<dyn std::error::Error>> {
-        let storage = Rc::new(MockStorage::new().with_inbox("- one"));
+        let storage = Rc::new(MockStorage::new().with_inbox("* Inbox\n** one"));
         let mut todos = Inbox::load(storage)?;
 
         save_new_reminder(&mut todos, "two")?;
 
-        assert_eq!("- one\n- two", todos.reminders());
+        assert_eq!("one\ntwo", todos.reminders());
         Ok(())
     }
 

@@ -13,7 +13,7 @@ pub enum InboxError {
 #[derive(Debug)]
 pub struct Inbox<T: Storage> {
     storage: T,
-    reminders: String,
+    reminders: Vec<String>,
 }
 
 impl<T> Inbox<T>
@@ -23,28 +23,39 @@ where
     fn new(storage: T) -> Self {
         Inbox {
             storage,
-            reminders: "".to_string(),
+            reminders: Vec::new(),
         }
     }
 
     pub fn load(storage: T) -> Result<Self, InboxError> {
-        let reminders = storage
+        let raw_inbox = storage
             .load()
             .map_err(|err| InboxError::FailedToLoad(err))?;
         let mut inbox = Inbox::new(storage);
-        inbox.reminders = reminders.trim().to_string();
+        inbox.reminders = raw_inbox
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.eq(&"* Inbox"))
+            .filter(|line| !line.is_empty())
+            .map(|reminder| reminder.strip_prefix("** ").unwrap_or(reminder))
+            .map(|reminder| String::from(reminder))
+            .collect();
         Ok(inbox)
     }
 
-    pub fn save(&mut self, note: &String) -> Result<(), InboxError> {
-        self.reminders.push_str(format!("\n- {}", note).as_str());
+    pub fn save(&mut self, note: &str) -> Result<(), InboxError> {
+        self.reminders.push(note.into());
+        let mut reminder_string = String::from("* Inbox");
+        for reminder in self.reminders.iter() {
+            reminder_string.push_str(format!("\n** {}", reminder).as_str());
+        }
         self.storage
-            .update(&self.reminders)
+            .update(&reminder_string)
             .map_err(|err| InboxError::CouldNotSaveReminder(format!("{}", err.to_string())))
     }
 
     pub fn reminders(&self) -> String {
-        self.reminders.clone()
+        self.reminders.join("\n")
     }
 }
 
@@ -61,7 +72,7 @@ mod tests {
 
         todo.save(&"note".to_string())?;
 
-        assert_eq!("\n- note".to_string(), storage.inbox());
+        assert_eq!("* Inbox\n** note".to_string(), storage.inbox());
         Ok(())
     }
 
@@ -73,7 +84,7 @@ mod tests {
         todo.save(&"note 1".to_string())?;
         todo.save(&"note 2".to_string())?;
 
-        assert_eq!("\n- note 1\n- note 2".to_string(), storage.inbox());
+        assert_eq!("* Inbox\n** note 1\n** note 2".to_string(), storage.inbox());
         Ok(())
     }
 
@@ -91,24 +102,54 @@ mod tests {
 
     #[test]
     fn when_todo_is_loaded_get_inbox_from_storage() -> Result<(), InboxError> {
-        let storage = MockStorage::new().with_inbox("- First todo").as_rc();
+        let storage = MockStorage::new()
+            .with_inbox("* Inbox\n** First todo")
+            .as_rc();
 
         let mut todo = Inbox::load(Rc::clone(&storage))?;
         todo.save(&"second todo".to_string())?;
 
-        assert_eq!("- First todo\n- second todo", storage.inbox());
+        assert_eq!("* Inbox\n** First todo\n** second todo", storage.inbox());
 
         Ok(())
     }
 
     #[test]
     fn when_todo_is_loaded_trim_excess_newlines() -> Result<(), InboxError> {
-        let storage = MockStorage::new().with_inbox("\n- First todo\n").as_rc();
+        let storage = MockStorage::new().with_inbox("\n** First todo\n").as_rc();
 
         let mut todo = Inbox::load(Rc::clone(&storage))?;
         todo.save(&"second todo".to_string())?;
 
-        assert_eq!("- First todo\n- second todo", storage.inbox());
+        assert_eq!("* Inbox\n** First todo\n** second todo", storage.inbox());
+
+        Ok(())
+    }
+
+    #[test]
+    fn when_todo_is_loaded_trim_excess_whitespace() -> Result<(), InboxError> {
+        let storage = MockStorage::new()
+            .with_inbox("* Inbox\n  ** First todo   \n")
+            .as_rc();
+
+        let mut todo = Inbox::load(Rc::clone(&storage))?;
+        todo.save(&"second todo".to_string())?;
+
+        assert_eq!("* Inbox\n** First todo\n** second todo", storage.inbox());
+
+        Ok(())
+    }
+
+    #[test]
+    fn when_a_reminder_has_invalid_format_just_keep_it() -> Result<(), InboxError> {
+        let storage = MockStorage::new()
+            .with_inbox("* Inbox\n- First todo\n")
+            .as_rc();
+
+        let mut todo = Inbox::load(Rc::clone(&storage))?;
+        todo.save(&"second todo".to_string())?;
+
+        assert_eq!("* Inbox\n** - First todo\n** second todo", storage.inbox());
 
         Ok(())
     }
