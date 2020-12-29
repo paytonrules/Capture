@@ -74,7 +74,7 @@ mod tests {
                 .borrow()
                 .as_ref()
                 .map(|sender| sender.send((token.to_string(), state)));
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
     }
 
