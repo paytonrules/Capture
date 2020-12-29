@@ -13,7 +13,7 @@ pub enum InboxError {
 #[derive(Debug)]
 pub struct Inbox<T: Storage> {
     storage: T,
-    pub reminders: String,
+    reminders: String,
 }
 
 impl<T> Inbox<T>
@@ -41,6 +41,10 @@ where
         self.storage
             .update(&self.reminders)
             .map_err(|err| InboxError::CouldNotSaveReminder(format!("{}", err.to_string())))
+    }
+
+    pub fn reminders(&self) -> String {
+        self.reminders.clone()
     }
 }
 

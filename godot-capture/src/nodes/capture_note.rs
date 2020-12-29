@@ -36,7 +36,7 @@ impl Remember {
             .ok();
 
         match &self.inbox {
-            Some(inbox) => update_view(owner, &inbox.reminders),
+            Some(inbox) => update_view(owner, &inbox.reminders()),
             None => clear_list(owner),
         }
     }
@@ -47,7 +47,7 @@ impl Remember {
 
         if let Some(inbox) = &mut self.inbox {
             match save_new_reminder(inbox, &new_reminder.text().to_string()) {
-                Ok(_) => update_view(owner, &inbox.reminders),
+                Ok(_) => update_view(owner, &inbox.reminders()),
                 Err(err) => display_error(owner, &err),
             }
         }
@@ -250,7 +250,7 @@ mod tests {
 
         let todos = load_inbox(storage);
         assert!(todos.is_ok());
-        assert_eq!("-first\nsecond", todos.unwrap().reminders);
+        assert_eq!("-first\nsecond", todos.unwrap().reminders());
     }
 
     #[test]
@@ -278,7 +278,7 @@ mod tests {
 
         save_new_reminder(&mut todos, "two")?;
 
-        assert_eq!("- one\n- two", todos.reminders);
+        assert_eq!("- one\n- two", todos.reminders());
         Ok(())
     }
 
