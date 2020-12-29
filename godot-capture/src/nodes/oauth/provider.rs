@@ -40,35 +40,48 @@ impl OAuthProvider {
 mod tests {
     use super::*;
     use crate::nodes::oauth::token::tests::MockTokenReceiver;
+    use std::cell::RefCell;
     use std::sync::mpsc::SyncSender;
     use std::sync::Arc;
+    use std::sync::Mutex;
 
     const STATE: i16 = 1;
-    #[derive(Clone)]
     struct MocketWrapper {
-        sync_sender: Option<SyncSender<(String, i16)>>,
+        sync_sender: Mutex<RefCell<Option<SyncSender<(String, i16)>>>>,
         port: u16,
     }
 
     impl MocketWrapper {
         fn new() -> Self {
+            MocketWrapper::new_with_port(0)
+        }
+
+        fn new_with_port(port: u16) -> Self {
             MocketWrapper {
-                sync_sender: None,
-                port: 0,
+                sync_sender: Mutex::new(RefCell::new(None)),
+                port,
             }
+        }
+
+        fn send_token_and_state(&self, token: &str, state: i16) {
+            assert!(self.sync_sender.lock().unwrap().borrow().is_some());
+            self.sync_sender
+                .lock()
+                .unwrap()
+                .borrow()
+                .as_ref()
+                .map(|sender| sender.send((token.to_string(), state)));
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
 
-    impl WebServer for MocketWrapper {
-        fn token_sender(mut self, sender: SyncSender<(String, i16)>) -> Self {
-            self.sync_sender = Some(sender);
+    impl WebServer for Arc<MocketWrapper> {
+        fn token_sender(self, sender: SyncSender<(String, i16)>) -> Self {
+            self.sync_sender.lock().unwrap().replace(Some(sender));
             self
         }
 
-        fn launch(self) {
-            self.sync_sender
-                .map(|sender| sender.send(("token".to_string(), STATE)));
-        }
+        fn launch(self) {}
 
         fn port(&self) -> u16 {
             self.port
@@ -77,24 +90,23 @@ mod tests {
 
     #[test]
     fn launches_webserver_on_provide() {
-        let token_receiver = Arc::new(MockTokenReceiver::new(1));
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(1));
+        let mock_server = Arc::new(MocketWrapper::new());
         let server = OAuthProvider::new();
-        let mock_server = MocketWrapper::new();
 
-        let _url = server.provide(mock_server.clone(), Arc::clone(&token_receiver));
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        let _url = server.provide(Arc::clone(&mock_server), Arc::clone(&token_receiver));
+        mock_server.send_token_and_state("token", STATE);
 
         assert_eq!(Some("token".to_string()), token_receiver.received_token());
     }
 
     #[test]
     fn returns_url_for_login_on_provide_with_port() -> Result<(), TokenError> {
-        let token_receiver = Arc::new(MockTokenReceiver::new(1));
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(1));
         let server = OAuthProvider::new();
-        let mut mock_server = MocketWrapper::new();
-        mock_server.port = 10000;
+        let mock_server = Arc::new(MocketWrapper::new_with_port(10000));
 
-        let url = server.provide(mock_server.clone(), Arc::clone(&token_receiver))?;
+        let url = server.provide(Arc::clone(&mock_server), Arc::clone(&token_receiver))?;
 
         assert!(url.starts_with("https://gitlab.com/oauth/authorize"));
         assert!(url.contains("&redirect_uri=http://127.0.0.1:10000/capture/"));
@@ -104,13 +116,13 @@ mod tests {
     #[test]
     fn includes_the_generated_state_in_the_url() -> Result<(), TokenError> {
         let state = 894;
-        let token_receiver = Arc::new(MockTokenReceiver::new(state));
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(state));
         let server = OAuthProvider::new();
-        let mock_server = MocketWrapper::new();
+        let mock_server = Arc::new(MocketWrapper::new());
 
-        let url = server.provide(mock_server.clone(), Arc::clone(&token_receiver))?;
+        let url = server.provide(Arc::clone(&mock_server), Arc::clone(&token_receiver))?;
 
-        assert!(url.contains(format!("&state={}", state).as_str()));
+        assert!(url.contains("&state=894"));
         Ok(())
     }
 
@@ -118,24 +130,25 @@ mod tests {
     fn does_not_provide_the_url_when_the_state_is_not_present() {
         let token_receiver = Arc::new(MockTokenReceiver::no_state_present());
         let server = OAuthProvider::new();
-        let mock_server = MocketWrapper::new();
+        let mock_server = Arc::new(MocketWrapper::new());
 
-        let url = server.provide(mock_server.clone(), Arc::clone(&token_receiver));
+        let url = server.provide(Arc::clone(&mock_server), Arc::clone(&token_receiver));
 
         assert_eq!(Err(TokenError::NoStatePresent), url);
     }
 
     #[test]
     fn uses_the_state_from_the_webserver_when_saving_token() -> Result<(), TokenError> {
+        let state_from_url = STATE;
         let mismatched_state = STATE + 1;
-        let token_receiver = Arc::new(MockTokenReceiver::new(mismatched_state));
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(mismatched_state));
         let server = OAuthProvider::new();
-        let mock_server = MocketWrapper::new();
+        let mock_server = Arc::new(MocketWrapper::new());
 
-        server.provide(mock_server.clone(), Arc::clone(&token_receiver))?;
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        server.provide(Arc::clone(&mock_server), Arc::clone(&token_receiver))?;
+        mock_server.send_token_and_state("irrelevant", state_from_url);
 
-        assert_eq!(Some(STATE), token_receiver.received_state());
+        assert_eq!(Some(state_from_url), token_receiver.received_state());
         Ok(())
     }
 }

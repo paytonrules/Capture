@@ -106,7 +106,7 @@ mod tests {
         let url = fragment_with_token_and_state(token, state);
 
         let fragment = CString::new(url);
-        let token_receiver = Rc::new(MockTokenReceiver::new(state));
+        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(state));
 
         let result = logged_in_with_auth_state(Rc::clone(&token_receiver), fragment?.as_ptr());
 
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn error_when_fragment_is_null() {
-        let token_receiver = Rc::new(MockTokenReceiver::new(1));
+        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(1));
 
         let result = logged_in_with_auth_state(Rc::clone(&token_receiver), std::ptr::null());
 
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn token_is_unchanged_when_fragment_has_no_seperator() -> Result<(), Box<dyn std::error::Error>>
     {
-        let token_receiver = Rc::new(MockTokenReceiver::new(1));
+        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(1));
 
         let result = logged_in_with_auth_state(
             Rc::clone(&token_receiver),
@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn token_is_unchanged_when_token_is_malformed() -> Result<(), Box<dyn std::error::Error>> {
-        let token_receiver = Rc::new(MockTokenReceiver::new(100));
+        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(100));
         let invalid_fragment = "access_token&state=100";
 
         let result = logged_in_with_auth_state(
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn error_on_received_token_is_propigated() -> Result<(), Box<dyn std::error::Error>> {
-        let token_receiver = Rc::new(MockTokenReceiver::new(1));
+        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(1));
         let fragment_with_mismatched_state = fragment_with_token_and_state("token", 100);
 
         let result = logged_in_with_auth_state(
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn error_when_the_query_string_has_extra_equal_signs() -> Result<(), Box<dyn std::error::Error>>
     {
-        let token_receiver = Rc::new(MockTokenReceiver::new(1));
+        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(1));
         let invalid_access_token = "token=token=jimmy&state=1";
 
         let result = logged_in_with_auth_state(
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn error_when_state_is_invalid() -> Result<(), Box<dyn std::error::Error>> {
-        let token_receiver = Rc::new(MockTokenReceiver::new(1));
+        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(1));
         let invalid_state = "access_token=token&state";
 
         let result = logged_in_with_auth_state(
@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn error_when_state_is_not_a_number() -> Result<(), Box<dyn std::error::Error>> {
-        let token_receiver = Rc::new(MockTokenReceiver::new(1));
+        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(1));
         let invalid_state = "access_token=token&state=not-a-number";
         let expected_error = "not-a-number".parse::<i16>();
 

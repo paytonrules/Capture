@@ -186,7 +186,7 @@ pub(crate) mod tests {
     }
 
     impl MockTokenReceiver {
-        pub fn new(state: i16) -> Self {
+        pub fn new_with_state(state: i16) -> Self {
             MockTokenReceiver {
                 state: Some(state),
                 received_token: Mutex::new(RefCell::new(None)),
