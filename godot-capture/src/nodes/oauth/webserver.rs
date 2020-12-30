@@ -17,7 +17,7 @@ pub enum BuildError {
 pub struct RocketWebServerBuilder {
     port: Option<u16>,
 }
-
+/*
 impl RocketWebServerBuilder {
     pub fn port(mut self, port: Option<u16>) -> Self {
         self.port = port;
@@ -58,27 +58,28 @@ impl WebServer for RocketWebServer {
         self.rocket.config().port
     }
 }
-
+*/
 #[cfg(test)]
 mod tests {
     use super::*;
+    /*
+        #[test]
+        fn build_rocket_webserver_with_port_provider() -> Result<(), BuildError> {
+            let wrapper = RocketWebServer::builder().port(Some(9001)).build()?;
 
-    #[test]
-    fn build_rocket_webserver_with_port_provider() -> Result<(), BuildError> {
-        let wrapper = RocketWebServer::builder().port(Some(9001)).build()?;
-
-        assert_eq!(9001, wrapper.port());
-        Ok(())
-    }
-
-    #[test]
-    fn fail_to_build_without_a_port() {
-        let wrapper = RocketWebServer::builder().build();
-
-        if let Err(error) = wrapper {
-            assert_eq!(BuildError::NoPortProvided, error);
-        } else {
-            assert!(false, "Did not return an error as expected");
+            assert_eq!(9001, wrapper.port());
+            Ok(())
         }
-    }
+
+        #[test]
+        fn fail_to_build_without_a_port() {
+            let wrapper = RocketWebServer::builder().build();
+
+            if let Err(error) = wrapper {
+                assert_eq!(BuildError::NoPortProvided, error);
+            } else {
+                assert!(false, "Did not return an error as expected");
+            }
+        }
+    */
 }
