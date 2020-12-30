@@ -57,37 +57,59 @@ pub fn rocket(port: u16) -> rocket::Rocket {
 
     rocket::custom(config).mount("/", routes![capture, save_token])
 }
+*/
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rocket::http::{ContentType, Status};
-    use rocket::local::Client;
+    use hyper::service::{make_service_fn, service_fn};
+    use hyper::{Body, Request, Response, Server};
+    use std::convert::Infallible;
+    use std::net::SocketAddr;
     use std::sync::mpsc::sync_channel;
-
-    #[test]
-    fn rocket_constructor_uses_passed_in_port() {
-        let rocket = rocket(8000);
-
-        assert_eq!(8000, rocket.config().port);
-    }
+    use tokio::runtime::Runtime;
+    use tokio::sync::oneshot;
+    use ureq::get;
 
     #[test]
     fn capture_renders_a_simple_web_page() -> Result<(), Box<dyn std::error::Error>> {
-        let client = Client::new(rocket(8080))?;
+        let mut rt = Runtime::new().unwrap();
 
-        let mut response = client.get("/capture").dispatch();
+        async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, Infallible> {
+            Ok(Response::new("Hello, World".into()))
+        }
 
-        assert_eq!(response.status(), Status::Ok);
-        assert_eq!(response.content_type(), Some(ContentType::HTML));
-        assert!(response
-            .body_string()
-            .ok_or("Error getting html body")?
-            .contains("Login Successful"));
+        let (sender, receiver) = oneshot::channel::<bool>();
+        async fn shutdown_signal(receiver: oneshot::Receiver<bool>) {
+            receiver.await.expect("couldn't shutdown");
+        }
 
+        rt.block_on(async {
+            let join = tokio::task::spawn(async {
+                let addr = SocketAddr::from(([127, 0, 0, 1], 5000));
+                let make_svc = make_service_fn(|_conn| async {
+                    // service_fn converts our function into a `Service`
+                    Ok::<_, Infallible>(service_fn(hello_world))
+                });
+
+                let server = Server::bind(&addr).serve(make_svc);
+
+                let graceful = server.with_graceful_shutdown(shutdown_signal(receiver));
+
+                // Run this server for... forever!
+                if let Err(e) = graceful.await {
+                    eprintln!("server error: {}", e);
+                }
+            });
+
+            sender.send(true);
+
+            join.await
+        });
         Ok(())
     }
 
+    /*
     #[test]
     fn posting_to_save_token_sends_the_token_and_state_to_the_channel(
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -104,6 +126,5 @@ mod tests {
         assert_eq!(Ok(("token".to_string(), 200)), recv.recv());
         assert_eq!(Status::Ok, response.status());
         Ok(())
-    }
+    }*/
 }
-*/
