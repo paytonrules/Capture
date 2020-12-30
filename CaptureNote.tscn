@@ -9,6 +9,7 @@
 [node name="CaptureNote" type="Control"]
 anchor_right = 1.0
 anchor_bottom = 1.0
+script = ExtResource( 3 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
@@ -20,30 +21,25 @@ __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="CenterContainer" type="CenterContainer" parent="."]
-anchor_right = 1.0
-anchor_bottom = 1.0
-margin_top = 1.29254
-margin_bottom = 1.29248
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+anchor_left = 0.5
+anchor_right = 0.5
+margin_left = -160.5
+margin_top = 50.0
+margin_right = 160.5
+custom_constants/separation = 20
 __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
-margin_left = 139.0
-margin_top = 315.0
-margin_right = 460.0
-margin_bottom = 708.0
-custom_constants/separation = 20
-
-[node name="Label" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="Label" type="Label" parent="VBoxContainer"]
 margin_right = 321.0
 margin_bottom = 36.0
 custom_fonts/font = ExtResource( 2 )
 custom_colors/font_color = Color( 0, 0, 0, 1 )
 text = "Remember Me!"
 
-[node name="Recent Todos" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="Recent Todos" type="Label" parent="VBoxContainer"]
 margin_top = 56.0
 margin_right = 321.0
 margin_bottom = 77.0
@@ -54,7 +50,7 @@ __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="New Todo" type="TextEdit" parent="CenterContainer/VBoxContainer"]
+[node name="New Todo" type="TextEdit" parent="VBoxContainer"]
 margin_top = 97.0
 margin_right = 321.0
 margin_bottom = 337.0
@@ -68,18 +64,17 @@ __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="CenterContainer" type="CenterContainer" parent="CenterContainer/VBoxContainer"]
+[node name="CenterContainer" type="CenterContainer" parent="VBoxContainer"]
 margin_top = 357.0
 margin_right = 321.0
 margin_bottom = 393.0
 
-[node name="Save" type="TextureButton" parent="CenterContainer/VBoxContainer/CenterContainer"]
+[node name="Save" type="TextureButton" parent="VBoxContainer/CenterContainer"]
 margin_left = 141.0
 margin_right = 179.0
 margin_bottom = 36.0
 texture_normal = ExtResource( 1 )
 texture_pressed = ExtResource( 5 )
-script = ExtResource( 3 )
-[connection signal="button_down" from="CenterContainer/VBoxContainer/CenterContainer/Save" to="CenterContainer/VBoxContainer/CenterContainer/Save" method="_button_down"]
-[connection signal="button_up" from="CenterContainer/VBoxContainer/CenterContainer/Save" to="CenterContainer/VBoxContainer/CenterContainer/Save" method="_button_up"]
-[connection signal="pressed" from="CenterContainer/VBoxContainer/CenterContainer/Save" to="CenterContainer/VBoxContainer/CenterContainer/Save" method="_save_me"]
+[connection signal="button_down" from="VBoxContainer/CenterContainer/Save" to="." method="_button_down"]
+[connection signal="button_up" from="VBoxContainer/CenterContainer/Save" to="." method="_button_up"]
+[connection signal="pressed" from="VBoxContainer/CenterContainer/Save" to="." method="_save_me"]

@@ -1,6 +1,6 @@
 use crate::nodes::inbox::{GitlabStorage, Inbox, InboxError, Storage};
 use crate::nodes::oauth::{AuthState, TokenRetriever};
-use gdnative::api::{AcceptDialog, TextEdit, TextureButton};
+use gdnative::api::{AcceptDialog, Control, TextEdit, TextureButton};
 use gdnative::prelude::*;
 use thiserror::Error;
 
@@ -14,19 +14,19 @@ pub enum CaptureError {
 }
 
 #[derive(NativeClass)]
-#[inherit(TextureButton)]
+#[inherit(Control)]
 pub struct Remember {
     inbox: Option<Inbox<GitlabStorage>>,
 }
 
 #[methods]
 impl Remember {
-    fn new(_owner: &TextureButton) -> Self {
+    fn new(_owner: &Control) -> Self {
         Remember { inbox: None }
     }
 
     #[export]
-    fn _ready(&mut self, owner: TRef<TextureButton>) {
+    fn _ready(&mut self, owner: TRef<Control>) {
         self.inbox = create_storage(&AuthState::get())
             .and_then(|storage| load_inbox(storage))
             .or_else(|err| {
@@ -42,7 +42,7 @@ impl Remember {
     }
 
     #[export]
-    fn _save_me(&mut self, owner: TRef<TextureButton>) {
+    fn _save_me(&mut self, owner: TRef<Control>) {
         let new_reminder = new_reminder_window(owner);
 
         if let Some(inbox) = &mut self.inbox {
@@ -54,17 +54,27 @@ impl Remember {
     }
 
     #[export]
-    fn _button_down(&self, owner: TRef<TextureButton>) {
-        owner.set_position(pressed_button(owner.position()), false);
+    fn _button_down(&self, owner: TRef<Control>) {
+        let button = owner
+            .get_node("VBoxContainer/CenterContainer/Save")
+            .map(|node| unsafe { node.assume_safe() })
+            .and_then(|node| node.cast::<TextureButton>())
+            .expect("Recent Reminders node is missing");
+        button.set_position(pressed_button(button.position()), false);
     }
 
     #[export]
-    fn _button_up(&self, owner: TRef<TextureButton>) {
-        owner.set_position(released_button(owner.position()), false);
+    fn _button_up(&self, owner: TRef<Control>) {
+        let button = owner
+            .get_node("VBoxContainer/CenterContainer/Save")
+            .map(|node| unsafe { node.assume_safe() })
+            .and_then(|node| node.cast::<TextureButton>())
+            .expect("Recent Reminders node is missing");
+        button.set_position(released_button(button.position()), false);
     }
 }
 
-fn display_error(owner: TRef<TextureButton>, err: &CaptureError) {
+fn display_error(owner: TRef<Control>, err: &CaptureError) {
     let dialog = AcceptDialog::new();
     dialog.set_text(err.to_string());
     let dialog = unsafe { dialog.assume_shared() };
@@ -73,9 +83,9 @@ fn display_error(owner: TRef<TextureButton>, err: &CaptureError) {
     dialog.popup_centered(Vector2::new(0.0, 0.0));
 }
 
-fn update_view(owner: TRef<TextureButton>, inbox: &str) {
+fn update_view(owner: TRef<Control>, inbox: &str) {
     let inbox_view = owner
-        .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
+        .get_node("VBoxContainer/Recent Todos")
         .map(|node| unsafe { node.assume_safe() })
         .and_then(|node| node.cast::<Label>())
         .expect("Recent Reminders node is missing");
@@ -84,18 +94,18 @@ fn update_view(owner: TRef<TextureButton>, inbox: &str) {
     new_reminder_window.set_text("");
 }
 
-fn clear_list(owner: TRef<TextureButton>) {
+fn clear_list(owner: TRef<Control>) {
     let inbox_view = owner
-        .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/Recent Todos")
+        .get_node("VBoxContainer/Recent Todos")
         .map(|node| unsafe { node.assume_safe() })
         .and_then(|node| node.cast::<Label>())
         .expect("Recent Reminders node is missing");
     inbox_view.set_text("");
 }
 
-fn new_reminder_window(owner: TRef<TextureButton>) -> TRef<TextEdit> {
+fn new_reminder_window(owner: TRef<Control>) -> TRef<TextEdit> {
     owner
-        .get_node("/root/CaptureNote/CenterContainer/VBoxContainer/New Todo")
+        .get_node("VBoxContainer/New Todo")
         .map(|node| unsafe { node.assume_safe() })
         .and_then(|node| node.cast::<TextEdit>())
         .expect("New Reminder node is missing")
