@@ -13,9 +13,6 @@ use std::os::raw::c_char;
 use std::str::Utf8Error;
 use thiserror::Error;
 
-#[macro_use]
-extern crate rocket;
-
 fn init(handle: InitHandle) {
     handle.add_class::<Login>();
     handle.add_class::<Remember>();

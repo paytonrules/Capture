@@ -1,9 +1,9 @@
-use rocket::config::{Config, Environment};
+/*use rocket::config::{Config, Environment};
 use rocket::request::Form;
 use rocket::response::content::Html;
 use rocket::State;
 use std::sync::mpsc::SyncSender;
-
+*/
 const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
 
 <html>
@@ -28,7 +28,7 @@ const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html PUBLIC "-//W3C//DT
   <p>Login Successful, return to the Capture app.</p>
 </body>
 </html>"#;
-
+/*
 #[get("/capture")]
 fn capture() -> Html<&'static str> {
     Html(LOGIN_SUCCESSFUL_PAGE)
@@ -106,3 +106,4 @@ mod tests {
         Ok(())
     }
 }
+*/

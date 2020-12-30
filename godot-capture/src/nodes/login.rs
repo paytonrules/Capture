@@ -1,5 +1,5 @@
 use super::oauth::{
-    AuthMachine, AuthState, BuildError, OAuthProvider, RocketWebServer, TokenReceiver,
+    AuthMachine, AuthState, BuildError, OAuthProvider, /*RocketWebServer, */ TokenReceiver,
     TokenRetriever,
 };
 use gdnative::api::OS;
@@ -78,7 +78,7 @@ impl Login {
 fn initialize_mac_oauth() -> Result<String, Error> {
     let provider = OAuthProvider::new();
     let port = port_check::free_local_port();
-    let rocket = RocketWebServer::builder()
+    /* let rocket = RocketWebServer::builder()
         .port(port)
         .build()
         .map_err(|err| Error::OAuthError(err))?;
@@ -86,7 +86,8 @@ fn initialize_mac_oauth() -> Result<String, Error> {
 
     provider
         .provide(rocket, AuthState::get())
-        .map_err(|err| Error::TokenError(err))
+        .map_err(|err| Error::TokenError(err))*/
+    Err(Error::UnsupportedPlatform)
 }
 
 fn initialize_ios_oauth() -> Result<String, Error> {
