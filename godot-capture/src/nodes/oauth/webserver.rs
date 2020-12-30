@@ -49,9 +49,11 @@ impl WebServer for RocketWebServer {
             rocket: self.rocket.manage(sender),
         }
     }
+
     fn launch(self) {
         self.rocket.launch();
     }
+
     fn port(&self) -> u16 {
         self.rocket.config().port
     }
