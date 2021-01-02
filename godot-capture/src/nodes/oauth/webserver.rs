@@ -1,10 +1,10 @@
 use super::login_site;
+use super::TokenError;
 use std::sync::mpsc::SyncSender;
 use thiserror::Error;
 
 pub trait WebServer {
-    fn token_sender(self, sender: SyncSender<(String, i16)>) -> Self;
-    fn launch(self, callback: impl FnOnce(&str, i16) -> () + 'static);
+    fn launch(self, callback: impl FnOnce(&str, i16) -> Result<(), TokenError> + 'static);
     fn port(&self) -> u16;
 }
 
