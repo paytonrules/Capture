@@ -4,7 +4,7 @@ use thiserror::Error;
 
 pub trait WebServer {
     fn token_sender(self, sender: SyncSender<(String, i16)>) -> Self;
-    fn launch(self);
+    fn launch(self, callback: impl FnOnce(&str, i16) -> () + 'static);
     fn port(&self) -> u16;
 }
 
