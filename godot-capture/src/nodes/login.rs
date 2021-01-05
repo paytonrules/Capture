@@ -1,6 +1,5 @@
 use super::oauth::{
-    AuthMachine, AuthState, BuildError, OAuthProvider, /*RocketWebServer, */ TokenReceiver,
-    TokenRetriever,
+    AuthMachine, AuthState, HyperWebServer, OAuthProvider, TokenReceiver, TokenRetriever,
 };
 use gdnative::api::OS;
 use gdnative::prelude::*;
@@ -12,11 +11,11 @@ enum Error {
     #[error("Attempting to run Capture on unsupported platform")]
     UnsupportedPlatform,
 
-    #[error("Error building Rocket Server for OAuth {0}")]
-    OAuthError(BuildError),
-
     #[error("Error providing token for OAuth {0}")]
     TokenError(super::oauth::TokenError),
+
+    #[error("No free ports available")]
+    NoFreePort,
 }
 
 #[derive(NativeClass)]
@@ -77,17 +76,12 @@ impl Login {
 
 fn initialize_mac_oauth() -> Result<String, Error> {
     let provider = OAuthProvider::new();
-    let port = port_check::free_local_port();
-    /* let rocket = RocketWebServer::builder()
-        .port(port)
-        .build()
-        .map_err(|err| Error::OAuthError(err))?;
-    godot_print!("server on port {:?}", port);
+    let port = port_check::free_local_port().ok_or(Error::NoFreePort)?;
+    let webserver = HyperWebServer::new(port);
 
     provider
-        .provide(rocket, AuthState::get())
-        .map_err(|err| Error::TokenError(err))*/
-    Err(Error::UnsupportedPlatform)
+        .provide(webserver, AuthState::get())
+        .map_err(|err| Error::TokenError(err))
 }
 
 fn initialize_ios_oauth() -> Result<String, Error> {

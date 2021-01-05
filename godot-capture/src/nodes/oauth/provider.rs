@@ -11,7 +11,7 @@ impl OAuthProvider {
     pub fn provide<T, U>(&self, server: T, token_receiver: U) -> Result<String, TokenError>
     where
         T: WebServer,
-        U: TokenReceiver + 'static,
+        U: TokenReceiver + 'static + Send,
     {
         let state = token_receiver.state().ok_or(TokenError::NoStatePresent)?;
         let login_url = format!("https://gitlab.com/oauth/authorize?client_id=1ec97e4c1c7346edf5ddb514fdd6598e304957b40ca5368b1f191ffc906142ba&redirect_uri=http://127.0.0.1:{}/capture/&response_type=token&state={}&scope=api",
@@ -40,6 +40,7 @@ mod tests {
     use crate::nodes::oauth::token::tests::MockTokenReceiver;
     use std::cell::RefCell;
     use std::rc::Rc;
+    use std::sync::Arc;
 
     const STATE: i16 = 1;
     type CallbackFn = dyn FnOnce(&str, i16) -> Result<(), TokenError> + 'static;
@@ -84,22 +85,22 @@ mod tests {
 
     #[test]
     fn launches_webserver_on_provide() {
-        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(STATE));
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(STATE));
         let mock_server = MockWebServer::new();
         let oauth_provider = OAuthProvider::new();
 
-        let _url = oauth_provider.provide(Rc::clone(&mock_server), Rc::clone(&token_receiver));
+        let _url = oauth_provider.provide(Rc::clone(&mock_server), Arc::clone(&token_receiver));
 
         assert_eq!(true, mock_server.launched());
     }
 
     #[test]
     fn returns_url_for_login_on_provide_with_port() -> Result<(), TokenError> {
-        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(STATE));
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(STATE));
         let server = OAuthProvider::new();
         let mock_server = MockWebServer::new_with_port(10000);
 
-        let url = server.provide(Rc::clone(&mock_server), Rc::clone(&token_receiver))?;
+        let url = server.provide(Rc::clone(&mock_server), Arc::clone(&token_receiver))?;
 
         assert!(url.starts_with("https://gitlab.com/oauth/authorize"));
         assert!(url.contains("&redirect_uri=http://127.0.0.1:10000/capture/"));
@@ -109,11 +110,11 @@ mod tests {
     #[test]
     fn includes_the_generated_state_in_the_url() -> Result<(), TokenError> {
         let state = 894;
-        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(state));
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(state));
         let server = OAuthProvider::new();
         let mock_server = MockWebServer::new();
 
-        let url = server.provide(Rc::clone(&mock_server), Rc::clone(&token_receiver))?;
+        let url = server.provide(Rc::clone(&mock_server), Arc::clone(&token_receiver))?;
 
         assert!(url.contains("&state=894"));
         Ok(())
@@ -122,11 +123,11 @@ mod tests {
     #[test]
     fn passes_the_returned_token_and_state_to_the_receiver() {
         let state = STATE;
-        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(state));
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(state));
         let mock_server = MockWebServer::new();
         let oauth_provider = OAuthProvider::new();
 
-        let _url = oauth_provider.provide(Rc::clone(&mock_server), Rc::clone(&token_receiver));
+        let _url = oauth_provider.provide(Rc::clone(&mock_server), Arc::clone(&token_receiver));
 
         mock_server.fire_launch_callback("token", state);
 
@@ -136,11 +137,11 @@ mod tests {
 
     #[test]
     fn does_not_provide_the_url_when_the_state_is_not_present() {
-        let token_receiver = Rc::new(MockTokenReceiver::no_state_present());
+        let token_receiver = Arc::new(MockTokenReceiver::no_state_present());
         let server = OAuthProvider::new();
         let mock_server = MockWebServer::new();
 
-        let url = server.provide(Rc::clone(&mock_server), Rc::clone(&token_receiver));
+        let url = server.provide(Rc::clone(&mock_server), Arc::clone(&token_receiver));
 
         assert_eq!(Err(TokenError::NoStatePresent), url);
     }
@@ -149,11 +150,11 @@ mod tests {
     fn uses_the_state_from_the_webserver_when_saving_token() -> Result<(), TokenError> {
         let state_from_url = STATE;
         let mismatched_state = STATE + 1;
-        let token_receiver = Rc::new(MockTokenReceiver::new_with_state(mismatched_state));
+        let token_receiver = Arc::new(MockTokenReceiver::new_with_state(mismatched_state));
         let server = OAuthProvider::new();
         let mock_server = MockWebServer::new();
 
-        server.provide(Rc::clone(&mock_server), Rc::clone(&token_receiver))?;
+        server.provide(Rc::clone(&mock_server), Arc::clone(&token_receiver))?;
         mock_server.fire_launch_callback("irrelevant", state_from_url);
 
         assert_eq!(Some(state_from_url), token_receiver.received_state());
