@@ -1,85 +1,107 @@
-use super::login_site;
 use super::TokenError;
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Request, Response, Server, StatusCode};
+use std::net::SocketAddr;
 use std::sync::mpsc::SyncSender;
 use thiserror::Error;
+use tokio::runtime::Runtime;
 
 pub trait WebServer {
-    fn launch(self, callback: impl FnOnce(&str, i16) -> Result<(), TokenError> + 'static);
+    fn launch(self, callback: impl FnOnce(&str, i16) -> Result<(), TokenError> + 'static + Send);
     fn port(&self) -> u16;
 }
 
-#[derive(Debug, PartialEq, Error)]
-pub enum BuildError {
-    #[error("No port was available to the builder, or the provided port was `None`")]
-    NoPortProvided,
+pub struct HyperWebServer {
+    port: u16,
 }
 
-pub struct RocketWebServerBuilder {
-    port: Option<u16>,
-}
-/*
-impl RocketWebServerBuilder {
-    pub fn port(mut self, port: Option<u16>) -> Self {
-        self.port = port;
-        self
-    }
-
-    pub fn build(self) -> Result<RocketWebServer, BuildError> {
-        self.port
-            .map(|port| RocketWebServer {
-                rocket: login_site::rocket(port),
-            })
-            .ok_or(BuildError::NoPortProvided)
+impl HyperWebServer {
+    pub fn new(port: u16) -> Self {
+        HyperWebServer { port }
     }
 }
 
-pub struct RocketWebServer {
-    pub rocket: rocket::Rocket,
-}
-
-impl RocketWebServer {
-    pub fn builder() -> RocketWebServerBuilder {
-        RocketWebServerBuilder { port: None }
-    }
-}
-
-impl WebServer for RocketWebServer {
-    fn token_sender(self, sender: SyncSender<(String, i16)>) -> Self {
-        RocketWebServer {
-            rocket: self.rocket.manage(sender),
-        }
-    }
-
-    fn launch(self) {
-        self.rocket.launch();
-    }
-
+impl WebServer for HyperWebServer {
     fn port(&self) -> u16 {
-        self.rocket.config().port
+        self.port
+    }
+
+    fn launch(self, callback: impl FnOnce(&str, i16) -> Result<(), TokenError> + 'static + Send) {
+        std::thread::spawn(move || {
+            async fn capture(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+                if req.uri().path() == "/Capture" {
+                    Ok(Response::new("Hello, World".into()))
+                } else {
+                    let mut not_found = Response::default();
+                    *not_found.status_mut() = StatusCode::NOT_FOUND;
+                    Ok(not_found)
+                }
+            }
+
+            let make_svc =
+                make_service_fn(|_conn| async { Ok::<_, hyper::Error>(service_fn(capture)) });
+
+            let mut rt = Runtime::new().unwrap(); // Do I want unwrap?
+            rt.block_on(async {
+                let addr = SocketAddr::from(([127, 0, 0, 1], self.port));
+
+                let server = Server::bind(&addr).serve(make_svc);
+
+                if let Err(e) = server.await {
+                    eprintln!("server error: {}", e);
+                }
+            });
+        });
+
+        // make call to callback
+        // if success / done
+        // if fail - restart
     }
 }
-*/
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    /*
-        #[test]
-        fn build_rocket_webserver_with_port_provider() -> Result<(), BuildError> {
-            let wrapper = RocketWebServer::builder().port(Some(9001)).build()?;
+    use ureq::get;
 
-            assert_eq!(9001, wrapper.port());
-            Ok(())
-        }
+    #[test]
+    fn webserver_is_built_with_provided_port() {
+        let webserver = HyperWebServer::new(9001);
 
-        #[test]
-        fn fail_to_build_without_a_port() {
-            let wrapper = RocketWebServer::builder().build();
+        assert_eq!(9001, webserver.port());
+    }
 
-            if let Err(error) = wrapper {
-                assert_eq!(BuildError::NoPortProvided, error);
-            } else {
-                assert!(false, "Did not return an error as expected");
-            }
-        }
-    */
+    #[test]
+    fn launch_starts_a_server_with_a_capture_route() {
+        let (webserver, port) = create_webserver();
+        let url = format!("http://localhost:{}/Capture", port);
+
+        webserver.launch(|_first, _second| Ok(()));
+
+        let r = get(&url).call();
+        assert!(r.ok());
+    }
+
+    #[test]
+    fn launch_doesnt_respond_to_the_root() {
+        let (webserver, port) = create_webserver();
+        let url = format!("http://localhost:{}", port);
+
+        webserver.launch(|_first, _second| Ok(()));
+
+        let r = get(&url).call();
+        assert!(r.error());
+    }
+
+    // Test capture renders the right login page
+    // Test posting the state and token passes them through to the callback
+    // Test capture function sends the 'channel' oneshot on success
+    // Test webserver shuts down gracefully when the callback fn returns Ok
+
+    fn create_webserver() -> (HyperWebServer, u16) {
+        let port = port_check::free_local_port().expect("Could not find free port!");
+        let webserver = HyperWebServer::new(port);
+
+        (webserver, port)
+    }
 }
