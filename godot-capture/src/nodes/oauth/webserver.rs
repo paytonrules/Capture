@@ -1,13 +1,16 @@
 use super::TokenError;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server, StatusCode};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::mpsc::SyncSender;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::runtime::Runtime;
+use url::Url;
 
 pub trait WebServer {
-    fn launch(self, callback: impl FnOnce(&str, i16) -> Result<(), TokenError> + 'static + Send);
+    fn launch(self, callback: impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync);
     fn port(&self) -> u16;
 }
 
@@ -20,26 +23,55 @@ impl HyperWebServer {
         HyperWebServer { port }
     }
 }
+async fn capture(
+    callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
+    req: Request<Body>,
+) -> Result<Response<Body>, hyper::Error> {
+    if req.uri().path() == "/Capture" {
+        Ok(Response::new("Hello, World".into()))
+    } else if req.uri().path() == "/save_token" {
+        let params = url::form_urlencoded::parse(req.uri().query().unwrap().as_bytes())
+            .into_owned()
+            .collect::<HashMap<String, String>>();
+
+        let state = params
+            .get("state")
+            .and_then(|state| state.parse::<i16>().ok())
+            .unwrap();
+
+        callback(params.get("token").unwrap_or(&"".to_string()), state);
+
+        Ok(Response::new(
+            "Login Successful. Redirect To Capture App".into(),
+        ))
+    } else {
+        let mut not_found = Response::default();
+        *not_found.status_mut() = StatusCode::NOT_FOUND;
+        Ok(not_found)
+    }
+}
 
 impl WebServer for HyperWebServer {
     fn port(&self) -> u16 {
         self.port
     }
 
-    fn launch(self, callback: impl FnOnce(&str, i16) -> Result<(), TokenError> + 'static + Send) {
+    fn launch(
+        self,
+        callback: impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync,
+    ) {
         std::thread::spawn(move || {
-            async fn capture(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-                if req.uri().path() == "/Capture" {
-                    Ok(Response::new("Hello, World".into()))
-                } else {
-                    let mut not_found = Response::default();
-                    *not_found.status_mut() = StatusCode::NOT_FOUND;
-                    Ok(not_found)
-                }
-            }
+            let callback = Arc::new(callback);
 
-            let make_svc =
-                make_service_fn(|_conn| async { Ok::<_, hyper::Error>(service_fn(capture)) });
+            let make_svc = make_service_fn(move |_conn| {
+                let callback = callback.clone();
+                async {
+                    Ok::<_, hyper::Error>(service_fn(move |req| {
+                        let callback = callback.clone();
+                        capture(callback, req)
+                    }))
+                }
+            });
 
             let mut rt = Runtime::new().unwrap(); // Do I want unwrap?
             rt.block_on(async {
@@ -52,15 +84,14 @@ impl WebServer for HyperWebServer {
                 }
             });
         });
-
-        // make call to callback
-        // if success / done
-        // if fail - restart
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+    use std::sync::Mutex;
+
     use super::*;
     use ureq::get;
 
@@ -91,6 +122,33 @@ mod tests {
 
         let r = get(&url).call();
         assert!(r.error());
+    }
+
+    #[test]
+    fn capture_calls_the_callback_on_save_token_with_the_params() {
+        let url = "http://localhost:8000/save_token?token=token&state=1";
+        let req = hyper::Request::builder()
+            .method("POST")
+            .uri(url)
+            .body(Body::empty())
+            .unwrap();
+
+        let called = Arc::new(Mutex::new(RefCell::new(false)));
+        let callback_called = called.clone();
+
+        let callback = Arc::new(move |token: &str, state: i16| -> Result<(), TokenError> {
+            assert_eq!("token", token);
+            assert_eq!(1, state);
+            *callback_called.lock().unwrap().borrow_mut() = true;
+            Ok(())
+        });
+
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            capture(callback, req).await;
+        });
+
+        assert!(*called.lock().unwrap().borrow());
     }
 
     // Test capture renders the right login page
