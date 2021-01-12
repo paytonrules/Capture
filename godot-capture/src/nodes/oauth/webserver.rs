@@ -1,5 +1,6 @@
 use super::TokenError;
 use hyper::service::{make_service_fn, service_fn};
+use hyper::Method;
 use hyper::{Body, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -23,31 +24,33 @@ impl HyperWebServer {
         HyperWebServer { port }
     }
 }
-async fn capture(
+async fn router(
     callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
     req: Request<Body>,
 ) -> Result<Response<Body>, hyper::Error> {
-    if req.uri().path() == "/Capture" {
-        Ok(Response::new("Hello, World".into()))
-    } else if req.uri().path() == "/save_token" {
-        let params = url::form_urlencoded::parse(req.uri().query().unwrap().as_bytes())
-            .into_owned()
-            .collect::<HashMap<String, String>>();
+    match (req.method(), req.uri().path()) {
+        (&Method::GET, "/Capture") => Ok(Response::new("Hello, World".into())),
+        (&Method::POST, "/save_token") => {
+            let params = url::form_urlencoded::parse(req.uri().query().unwrap().as_bytes())
+                .into_owned()
+                .collect::<HashMap<String, String>>();
 
-        let state = params
-            .get("state")
-            .and_then(|state| state.parse::<i16>().ok())
-            .unwrap();
+            let state = params
+                .get("state")
+                .and_then(|state| state.parse::<i16>().ok())
+                .unwrap();
 
-        callback(params.get("token").unwrap_or(&"".to_string()), state);
+            callback(params.get("token").unwrap_or(&"".to_string()), state);
 
-        Ok(Response::new(
-            "Login Successful. Redirect To Capture App".into(),
-        ))
-    } else {
-        let mut not_found = Response::default();
-        *not_found.status_mut() = StatusCode::NOT_FOUND;
-        Ok(not_found)
+            Ok(Response::new(
+                "Login Successful. Redirect To Capture App".into(),
+            ))
+        }
+        _ => {
+            let mut not_found = Response::default();
+            *not_found.status_mut() = StatusCode::NOT_FOUND;
+            Ok(not_found)
+        }
     }
 }
 
@@ -68,7 +71,7 @@ impl WebServer for HyperWebServer {
                 async {
                     Ok::<_, hyper::Error>(service_fn(move |req| {
                         let callback = callback.clone();
-                        capture(callback, req)
+                        router(callback, req)
                     }))
                 }
             });
@@ -124,6 +127,40 @@ mod tests {
         assert!(r.error());
     }
 
+    fn create_callback_with(
+        cb: impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync,
+    ) -> (
+        Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
+        Arc<Mutex<RefCell<bool>>>,
+    ) {
+        let called = Arc::new(Mutex::new(RefCell::new(false)));
+        let callback_called = called.clone();
+
+        let wrapped_callback = Arc::new(move |token: &str, state: i16| -> Result<(), TokenError> {
+            *callback_called.lock().unwrap().borrow_mut() = true;
+            cb(token, state)
+        });
+        (wrapped_callback, called)
+    }
+
+    fn assert_called(called: Arc<Mutex<RefCell<bool>>>) {
+        assert!(*called.lock().unwrap().borrow());
+    }
+
+    fn assert_not_called(called: Arc<Mutex<RefCell<bool>>>) {
+        assert_eq!(false, *called.lock().unwrap().borrow());
+    }
+
+    fn run_router(
+        callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
+        req: Request<Body>,
+    ) {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            router(callback, req).await;
+        });
+    }
+
     #[test]
     fn capture_calls_the_callback_on_save_token_with_the_params() {
         let url = "http://localhost:8000/save_token?token=token&state=1";
@@ -133,22 +170,31 @@ mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let called = Arc::new(Mutex::new(RefCell::new(false)));
-        let callback_called = called.clone();
-
-        let callback = Arc::new(move |token: &str, state: i16| -> Result<(), TokenError> {
+        let (callback, called) = create_callback_with(|token, state| {
             assert_eq!("token", token);
             assert_eq!(1, state);
-            *callback_called.lock().unwrap().borrow_mut() = true;
             Ok(())
         });
 
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            capture(callback, req).await;
-        });
+        run_router(callback, req);
 
-        assert!(*called.lock().unwrap().borrow());
+        assert_called(called);
+    }
+
+    #[test]
+    fn capture_does_not_call_the_callback_on_save_token_as_a_get() {
+        let url = "http://localhost:8000/save_token?token=token&state=1";
+        let req = hyper::Request::builder()
+            .method("GET")
+            .uri(url)
+            .body(Body::empty())
+            .unwrap();
+
+        let (callback, called) = create_callback_with(move |token, state| Ok(()));
+
+        run_router(callback, req);
+
+        assert_not_called(called);
     }
 
     // Test capture renders the right login page
