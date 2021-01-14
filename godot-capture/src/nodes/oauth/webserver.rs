@@ -151,18 +151,55 @@ mod tests {
         assert_eq!(false, *called.lock().unwrap().borrow());
     }
 
+    #[derive(Debug)]
+    enum TestError {
+        HyperError(hyper::Error),
+        TokioError(tokio::io::Error),
+        FromUtf8Error(std::string::FromUtf8Error),
+    }
+
+    type TestResult = Result<(), TestError>;
+
     fn run_router(
         callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
         req: Request<Body>,
-    ) {
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            router(callback, req).await;
-        });
+    ) -> Result<Response<Body>, TestError> {
+        let mut rt = Runtime::new().map_err(|err| TestError::TokioError(err))?;
+        rt.block_on(async { router(callback, req).await })
+            .map_err(|err| TestError::HyperError(err))
+    }
+
+    fn response_as_string(response: &mut Response<Body>) -> Result<String, TestError> {
+        let mut runtime = Runtime::new().map_err(|err| TestError::TokioError(err))?;
+        let bytes = runtime
+            .block_on(hyper::body::to_bytes(response.body_mut()))
+            .map_err(|err| TestError::HyperError(err))?;
+
+        String::from_utf8(bytes.into_iter().collect()).map_err(|err| TestError::FromUtf8Error(err))
     }
 
     #[test]
-    fn capture_calls_the_callback_on_save_token_with_the_params() {
+    fn router_renders_the_default_html_page_on_capture() -> TestResult {
+        let url = "http://localhost:8000/Capture";
+        let req = hyper::Request::builder()
+            .method("GET")
+            .uri(url)
+            .body(Body::empty())
+            .unwrap();
+
+        let (callback, _) = create_callback_with(move |token, state| Ok(()));
+
+        let mut response = run_router(callback, req)?;
+        assert_eq!(
+            "Hello, World".to_string(),
+            response_as_string(&mut response)?
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn router_calls_the_callback_on_save_token_with_the_params() -> TestResult {
         let url = "http://localhost:8000/save_token?token=token&state=1";
         let req = hyper::Request::builder()
             .method("POST")
@@ -176,13 +213,14 @@ mod tests {
             Ok(())
         });
 
-        run_router(callback, req);
+        run_router(callback, req)?;
 
         assert_called(called);
+        Ok(())
     }
 
     #[test]
-    fn capture_does_not_call_the_callback_on_save_token_as_a_get() {
+    fn router_does_not_call_the_callback_on_save_token_as_a_get() -> TestResult {
         let url = "http://localhost:8000/save_token?token=token&state=1";
         let req = hyper::Request::builder()
             .method("GET")
@@ -192,9 +230,10 @@ mod tests {
 
         let (callback, called) = create_callback_with(move |token, state| Ok(()));
 
-        run_router(callback, req);
+        run_router(callback, req)?;
 
         assert_not_called(called);
+        Ok(())
     }
 
     // Test capture renders the right login page
