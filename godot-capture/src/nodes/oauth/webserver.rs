@@ -1,7 +1,6 @@
 use super::TokenError;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::Method;
-use hyper::{Body, Request, Response, Server, StatusCode};
+use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -74,15 +73,21 @@ impl HyperWebServer {
                     .and_then(|state| state.parse::<i16>().ok())
                     .unwrap();
 
-                if let Ok(_) = callback(params.get("token").unwrap_or(&"".to_string()), state) {
-                    if let Some(sender) = self.shutdown_tx.lock().await.take() {
-                        sender.send(());
+                match callback(params.get("token").unwrap_or(&"".to_string()), state) {
+                    Ok(()) => {
+                        if let Some(sender) = self.shutdown_tx.lock().await.take() {
+                            sender.send(());
+                        }
+                        Ok(Response::new(
+                            "Login Successful. Redirect To Capture App".into(),
+                        ))
+                    }
+                    Err(_) => {
+                        let mut not_found = Response::default();
+                        *not_found.status_mut() = StatusCode::NOT_FOUND;
+                        Ok(not_found)
                     }
                 }
-
-                Ok(Response::new(
-                    "Login Successful. Redirect To Capture App".into(),
-                ))
             }
             _ => {
                 let mut not_found = Response::default();
@@ -292,7 +297,6 @@ mod tests {
 
     #[test]
     fn router_does_not_call_the_callback_on_save_token_as_a_get() -> TestResult {
-        let (sender, _receiver) = oneshot::channel::<bool>();
         let url = "http://localhost:8000/save_token?token=token&state=1";
         let req = hyper::Request::builder()
             .method("GET")
@@ -306,6 +310,25 @@ mod tests {
         run_router(server, req, callback)?;
 
         assert_not_called(called);
+        Ok(())
+    }
+
+    #[test]
+    fn save_token_route_is_an_error_when_callback_is_an_error() -> TestResult {
+        let url = "http://localhost:8000/save_token?token=token&state=1";
+        let req = hyper::Request::builder()
+            .method("POST")
+            .uri(url)
+            .body(Body::empty())
+            .unwrap();
+        let server = HyperWebServer::new(8000);
+
+        let (callback, _) =
+            create_callback_with(move |_token, _state| Err(TokenError::AlreadyAuthenticated));
+
+        let response = run_router(server, req, callback)?;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
         Ok(())
     }
     // Test capture function sends the 'channel' oneshot on success
