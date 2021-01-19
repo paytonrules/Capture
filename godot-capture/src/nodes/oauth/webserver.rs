@@ -2,13 +2,44 @@ use super::TokenError;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Method;
 use hyper::{Body, Request, Response, Server, StatusCode};
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
-use thiserror::Error;
 use tokio::runtime::Runtime;
-use url::Url;
+use tokio::sync::{
+    oneshot::{self, Sender},
+    Mutex,
+};
+
+lazy_static! {
+    static ref SHUTDOWN_TX: Arc<Mutex<Option<Sender<()>>>> = <_>::default();
+}
+
+const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+
+<html>
+<head>
+
+  <script type="text/javascript">
+    document.addEventListener("DOMContentLoaded", (event) => {
+        const hashAsParams = new URLSearchParams(
+            window.location.hash.substr(1)
+        );
+        fetch("/save_token", {
+            method: 'POST',
+            body: hashAsParams
+        });
+    });
+  </script>
+
+  <title></title>
+</head>
+
+<body>
+  <p>Login Successful, return to the Capture app.</p>
+</body>
+</html>"#;
 
 pub trait WebServer {
     fn launch(self, callback: impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync);
@@ -25,11 +56,11 @@ impl HyperWebServer {
     }
 }
 async fn router(
-    callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
     req: Request<Body>,
+    callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
 ) -> Result<Response<Body>, hyper::Error> {
     match (req.method(), req.uri().path()) {
-        (&Method::GET, "/Capture") => Ok(Response::new("Hello, World".into())),
+        (&Method::GET, "/Capture") => Ok(Response::new(LOGIN_SUCCESSFUL_PAGE.into())),
         (&Method::POST, "/save_token") => {
             let params = url::form_urlencoded::parse(req.uri().query().unwrap().as_bytes())
                 .into_owned()
@@ -40,7 +71,11 @@ async fn router(
                 .and_then(|state| state.parse::<i16>().ok())
                 .unwrap();
 
-            callback(params.get("token").unwrap_or(&"".to_string()), state);
+            if let Ok(_) = callback(params.get("token").unwrap_or(&"".to_string()), state) {
+                if let Some(sender) = SHUTDOWN_TX.lock().await.take() {
+                    sender.send(());
+                }
+            }
 
             Ok(Response::new(
                 "Login Successful. Redirect To Capture App".into(),
@@ -71,18 +106,23 @@ impl WebServer for HyperWebServer {
                 async {
                     Ok::<_, hyper::Error>(service_fn(move |req| {
                         let callback = callback.clone();
-                        router(callback, req)
+                        router(req, callback)
                     }))
                 }
             });
-
             let mut rt = Runtime::new().unwrap(); // Do I want unwrap?
             rt.block_on(async {
                 let addr = SocketAddr::from(([127, 0, 0, 1], self.port));
 
                 let server = Server::bind(&addr).serve(make_svc);
+                let (sender, receiver) = oneshot::channel::<()>();
+                SHUTDOWN_TX.lock().await.replace(sender);
 
-                if let Err(e) = server.await {
+                let graceful = server.with_graceful_shutdown(async {
+                    receiver.await.ok();
+                });
+
+                if let Err(e) = graceful.await {
                     eprintln!("server error: {}", e);
                 }
             });
@@ -92,11 +132,12 @@ impl WebServer for HyperWebServer {
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
     use std::cell::RefCell;
     use std::sync::Mutex;
 
     use super::*;
-    use ureq::get;
+    use ureq::{get, post};
 
     #[test]
     fn webserver_is_built_with_provided_port() {
@@ -106,6 +147,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(webserver)]
     fn launch_starts_a_server_with_a_capture_route() {
         let (webserver, port) = create_webserver();
         let url = format!("http://localhost:{}/Capture", port);
@@ -117,6 +159,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(webserver)]
     fn launch_doesnt_respond_to_the_root() {
         let (webserver, port) = create_webserver();
         let url = format!("http://localhost:{}", port);
@@ -124,6 +167,20 @@ mod tests {
         webserver.launch(|_first, _second| Ok(()));
 
         let r = get(&url).call();
+        assert!(r.error());
+    }
+
+    #[test]
+    #[serial(webserver)]
+    fn webserver_shutsdown_when_correct_token_and_state_are_sent() {
+        let (webserver, port) = create_webserver();
+        let url = format!("http://localhost:{}/save_token?token=token&state=1", port);
+
+        webserver.launch(|_first, _second| Ok(()));
+
+        let r = post(&url).call();
+        assert!(r.ok());
+        let r = post(&url).call();
         assert!(r.error());
     }
 
@@ -156,6 +213,13 @@ mod tests {
         HyperError(hyper::Error),
         TokioError(tokio::io::Error),
         FromUtf8Error(std::string::FromUtf8Error),
+        OneshotError(tokio::sync::oneshot::error::TryRecvError),
+    }
+
+    impl From<tokio::sync::oneshot::error::TryRecvError> for TestError {
+        fn from(err: tokio::sync::oneshot::error::TryRecvError) -> Self {
+            TestError::OneshotError(err)
+        }
     }
 
     type TestResult = Result<(), TestError>;
@@ -165,7 +229,7 @@ mod tests {
         req: Request<Body>,
     ) -> Result<Response<Body>, TestError> {
         let mut rt = Runtime::new().map_err(|err| TestError::TokioError(err))?;
-        rt.block_on(async { router(callback, req).await })
+        rt.block_on(async { router(req, callback).await })
             .map_err(|err| TestError::HyperError(err))
     }
 
@@ -191,7 +255,7 @@ mod tests {
 
         let mut response = run_router(callback, req)?;
         assert_eq!(
-            "Hello, World".to_string(),
+            LOGIN_SUCCESSFUL_PAGE.to_string(),
             response_as_string(&mut response)?
         );
 
@@ -221,6 +285,7 @@ mod tests {
 
     #[test]
     fn router_does_not_call_the_callback_on_save_token_as_a_get() -> TestResult {
+        let (sender, _receiver) = oneshot::channel::<bool>();
         let url = "http://localhost:8000/save_token?token=token&state=1";
         let req = hyper::Request::builder()
             .method("GET")
@@ -235,9 +300,6 @@ mod tests {
         assert_not_called(called);
         Ok(())
     }
-
-    // Test capture renders the right login page
-    // Test posting the state and token passes them through to the callback
     // Test capture function sends the 'channel' oneshot on success
     // Test webserver shuts down gracefully when the callback fn returns Ok
 
