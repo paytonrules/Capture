@@ -68,4 +68,5 @@ text = "Log In"
 __meta__ = {
 "_edit_use_anchors_": false
 }
+
 [connection signal="pressed" from="Background/CenterContainer/VBoxContainer/LoginButton" to="." method="_button_pressed"]
