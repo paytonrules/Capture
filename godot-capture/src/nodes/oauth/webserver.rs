@@ -1,6 +1,7 @@
 use super::TokenError;
+use gdnative::godot_print;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use hyper::{http, Body, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -10,11 +11,10 @@ use tokio::sync::{
     Mutex,
 };
 
-const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html>
 
 <html>
 <head>
-
   <script type="text/javascript">
     document.addEventListener("DOMContentLoaded", (event) => {
         const hashAsParams = new URLSearchParams(
@@ -60,9 +60,11 @@ impl HyperWebServer {
         self,
         req: Request<Body>,
         callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
-    ) -> Result<Response<Body>, hyper::Error> {
+    ) -> http::Result<Response<Body>> {
         match (req.method(), req.uri().path()) {
-            (&Method::GET, "/Capture") => Ok(Response::new(LOGIN_SUCCESSFUL_PAGE.into())),
+            (&Method::GET, "/capture/") => Response::builder()
+                .header("Content-Type", "text/html")
+                .body(LOGIN_SUCCESSFUL_PAGE.into()),
             (&Method::POST, "/save_token") => {
                 let params = url::form_urlencoded::parse(req.uri().query().unwrap().as_bytes())
                     .into_owned()
@@ -161,7 +163,7 @@ mod tests {
     #[test]
     fn launch_starts_a_server_with_a_capture_route() {
         let (webserver, port) = create_webserver();
-        let url = format!("http://localhost:{}/Capture", port);
+        let url = format!("http://localhost:{}/capture/", port);
 
         webserver.launch(|_first, _second| Ok(()));
 
@@ -219,6 +221,7 @@ mod tests {
 
     #[derive(Debug)]
     enum TestError {
+        HttpError(hyper::http::Error),
         HyperError(hyper::Error),
         TokioError(tokio::io::Error),
         FromUtf8Error(std::string::FromUtf8Error),
@@ -240,7 +243,7 @@ mod tests {
     ) -> Result<Response<Body>, TestError> {
         let mut rt = Runtime::new().map_err(|err| TestError::TokioError(err))?;
         rt.block_on(async { server.router(req, callback).await })
-            .map_err(|err| TestError::HyperError(err))
+            .map_err(|err| TestError::HttpError(err))
     }
 
     fn response_as_string(response: &mut Response<Body>) -> Result<String, TestError> {
@@ -254,7 +257,7 @@ mod tests {
 
     #[test]
     fn router_renders_the_default_html_page_on_capture() -> TestResult {
-        let url = "http://localhost:8000/Capture";
+        let url = "http://localhost:8000/capture/";
         let req = hyper::Request::builder()
             .method("GET")
             .uri(url)
