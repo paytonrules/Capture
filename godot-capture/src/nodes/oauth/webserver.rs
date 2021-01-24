@@ -1,7 +1,6 @@
 use super::TokenError;
-use gdnative::godot_print;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{http, Body, Method, Request, Response, Server, StatusCode};
+use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -10,6 +9,7 @@ use tokio::sync::{
     oneshot::{self, Sender},
     Mutex,
 };
+use url::form_urlencoded;
 
 const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html>
 
@@ -60,13 +60,15 @@ impl HyperWebServer {
         self,
         req: Request<Body>,
         callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
-    ) -> http::Result<Response<Body>> {
+    ) -> Result<Response<Body>, hyper::Error> {
         match (req.method(), req.uri().path()) {
-            (&Method::GET, "/capture/") => Response::builder()
-                .header("Content-Type", "text/html")
-                .body(LOGIN_SUCCESSFUL_PAGE.into()),
+            (&Method::GET, "/capture/") => Ok(Response::new(Body::from(LOGIN_SUCCESSFUL_PAGE))),
             (&Method::POST, "/save_token") => {
-                let params = url::form_urlencoded::parse(req.uri().query().unwrap().as_bytes())
+                // I stole this straight from the example code at
+                // https://github.com/hyperium/hyper/blob/master/examples/params.rs
+                let b = hyper::body::to_bytes(req).await?;
+                //
+                let params = form_urlencoded::parse(b.as_ref())
                     .into_owned()
                     .collect::<HashMap<String, String>>();
 
@@ -185,14 +187,104 @@ mod tests {
     #[test]
     fn webserver_shutsdown_when_correct_token_and_state_are_sent() {
         let (webserver, port) = create_webserver();
-        let url = format!("http://localhost:{}/save_token?token=token&state=1", port);
+        let url = format!("http://localhost:{}/save_token", port);
 
         webserver.launch(|_first, _second| Ok(()));
 
-        let r = post(&url).call();
+        let r = post(&url).send_form(&[("token", "token"), ("state", "1")]);
         assert!(r.ok());
-        let r = post(&url).call();
+        let r = post(&url).send_form(&[("token", "token"), ("state", "1")]);
         assert!(r.error());
+    }
+
+    #[test]
+    fn router_renders_the_default_html_page_on_capture() -> TestResult {
+        let url = "http://localhost:8000/capture/";
+        let req = hyper::Request::builder()
+            .method("GET")
+            .uri(url)
+            .body(Body::empty())
+            .unwrap();
+        let server = HyperWebServer::new(8000);
+
+        let (callback, _) = create_callback_with(move |token, state| Ok(()));
+
+        let mut response = server.route_blocking(req, callback)?;
+        assert_eq!(
+            LOGIN_SUCCESSFUL_PAGE.to_string(),
+            response_as_string(&mut response)?
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn router_calls_the_callback_on_save_token_with_the_params() -> TestResult {
+        let url = "http://localhost:8000/save_token";
+        let req = hyper::Request::builder()
+            .method("POST")
+            .uri(url)
+            .body(Body::from("token=token&state=1"))
+            .unwrap();
+        let server = HyperWebServer::new(8000);
+
+        let (callback, called) = create_callback_with(|token, state| {
+            assert_eq!("token", token);
+            assert_eq!(1, state);
+            Ok(())
+        });
+
+        server.route_blocking(req, callback)?;
+
+        assert_called(called);
+        Ok(())
+    }
+
+    #[test]
+    fn router_does_not_call_the_callback_on_save_token_as_a_get() -> TestResult {
+        let url = "http://localhost:8000/save_token?token=token&state=1";
+        let req = hyper::Request::builder()
+            .method("GET")
+            .uri(url)
+            .body(Body::empty())
+            .unwrap();
+        let server = HyperWebServer::new(8000);
+
+        let (callback, called) = create_callback_with(move |token, state| Ok(()));
+
+        server.route_blocking(req, callback)?;
+
+        assert_not_called(called);
+        Ok(())
+    }
+
+    #[test]
+    fn save_token_route_is_an_error_when_callback_is_an_error() -> TestResult {
+        let url = "http://localhost:8000/save_token";
+        let req = hyper::Request::builder()
+            .method("POST")
+            .uri(url)
+            .body(Body::from("?token=token&state=1"))
+            .unwrap();
+        let server = HyperWebServer::new(8000);
+
+        let (callback, _) =
+            create_callback_with(move |_token, _state| Err(TokenError::AlreadyAuthenticated));
+
+        let response = server.route_blocking(req, callback)?;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        Ok(())
+    }
+    // Test capture function sends the 'channel' oneshot on success
+    // Test webserver shuts down gracefully when the callback fn returns Ok
+
+    fn create_webserver() -> (HyperWebServer, u16) {
+        let port = port_check::free_local_port().expect("Could not find free port!");
+        let webserver = HyperWebServer::new(port);
+
+        (webserver, port)
     }
 
     fn create_callback_with(
@@ -221,7 +313,6 @@ mod tests {
 
     #[derive(Debug)]
     enum TestError {
-        HttpError(hyper::http::Error),
         HyperError(hyper::Error),
         TokioError(tokio::io::Error),
         FromUtf8Error(std::string::FromUtf8Error),
@@ -236,14 +327,16 @@ mod tests {
 
     type TestResult = Result<(), TestError>;
 
-    fn run_router(
-        server: HyperWebServer,
-        req: Request<Body>,
-        callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
-    ) -> Result<Response<Body>, TestError> {
-        let mut rt = Runtime::new().map_err(|err| TestError::TokioError(err))?;
-        rt.block_on(async { server.router(req, callback).await })
-            .map_err(|err| TestError::HttpError(err))
+    impl HyperWebServer {
+        fn route_blocking(
+            self,
+            req: Request<Body>,
+            callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
+        ) -> Result<Response<Body>, TestError> {
+            let mut rt = Runtime::new().map_err(|err| TestError::TokioError(err))?;
+            rt.block_on(async { self.router(req, callback).await })
+                .map_err(|err| TestError::HyperError(err))
+        }
     }
 
     fn response_as_string(response: &mut Response<Body>) -> Result<String, TestError> {
@@ -253,94 +346,5 @@ mod tests {
             .map_err(|err| TestError::HyperError(err))?;
 
         String::from_utf8(bytes.into_iter().collect()).map_err(|err| TestError::FromUtf8Error(err))
-    }
-
-    #[test]
-    fn router_renders_the_default_html_page_on_capture() -> TestResult {
-        let url = "http://localhost:8000/capture/";
-        let req = hyper::Request::builder()
-            .method("GET")
-            .uri(url)
-            .body(Body::empty())
-            .unwrap();
-        let server = HyperWebServer::new(8000);
-
-        let (callback, _) = create_callback_with(move |token, state| Ok(()));
-
-        let mut response = run_router(server, req, callback)?;
-        assert_eq!(
-            LOGIN_SUCCESSFUL_PAGE.to_string(),
-            response_as_string(&mut response)?
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn router_calls_the_callback_on_save_token_with_the_params() -> TestResult {
-        let url = "http://localhost:8000/save_token?token=token&state=1";
-        let req = hyper::Request::builder()
-            .method("POST")
-            .uri(url)
-            .body(Body::empty())
-            .unwrap();
-        let server = HyperWebServer::new(8000);
-
-        let (callback, called) = create_callback_with(|token, state| {
-            assert_eq!("token", token);
-            assert_eq!(1, state);
-            Ok(())
-        });
-
-        run_router(server, req, callback)?;
-
-        assert_called(called);
-        Ok(())
-    }
-
-    #[test]
-    fn router_does_not_call_the_callback_on_save_token_as_a_get() -> TestResult {
-        let url = "http://localhost:8000/save_token?token=token&state=1";
-        let req = hyper::Request::builder()
-            .method("GET")
-            .uri(url)
-            .body(Body::empty())
-            .unwrap();
-        let server = HyperWebServer::new(8000);
-
-        let (callback, called) = create_callback_with(move |token, state| Ok(()));
-
-        run_router(server, req, callback)?;
-
-        assert_not_called(called);
-        Ok(())
-    }
-
-    #[test]
-    fn save_token_route_is_an_error_when_callback_is_an_error() -> TestResult {
-        let url = "http://localhost:8000/save_token?token=token&state=1";
-        let req = hyper::Request::builder()
-            .method("POST")
-            .uri(url)
-            .body(Body::empty())
-            .unwrap();
-        let server = HyperWebServer::new(8000);
-
-        let (callback, _) =
-            create_callback_with(move |_token, _state| Err(TokenError::AlreadyAuthenticated));
-
-        let response = run_router(server, req, callback)?;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-        Ok(())
-    }
-    // Test capture function sends the 'channel' oneshot on success
-    // Test webserver shuts down gracefully when the callback fn returns Ok
-
-    fn create_webserver() -> (HyperWebServer, u16) {
-        let port = port_check::free_local_port().expect("Could not find free port!");
-        let webserver = HyperWebServer::new(port);
-
-        (webserver, port)
     }
 }
