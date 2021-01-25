@@ -35,6 +35,12 @@ const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html>
 </body>
 </html>"#;
 
+fn not_found() -> Result<Response<Body>, hyper::Error> {
+    let mut not_found = Response::default();
+    *not_found.status_mut() = StatusCode::NOT_FOUND;
+    Ok(not_found)
+}
+
 pub trait WebServer {
     fn launch(self, callback: impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync);
     fn port(&self) -> u16;
@@ -53,9 +59,7 @@ impl HyperWebServer {
             shutdown_tx: <_>::default(),
         }
     }
-}
 
-impl HyperWebServer {
     async fn router(
         self,
         req: Request<Body>,
@@ -74,32 +78,26 @@ impl HyperWebServer {
 
                 let state = params
                     .get("state")
-                    .and_then(|state| state.parse::<i16>().ok())
-                    .unwrap();
+                    .and_then(|state| state.parse::<i16>().ok());
 
-                let access_token = params.get("access_token").unwrap();
+                let access_token = params.get("access_token");
 
-                match callback(access_token, state) {
-                    Ok(()) => {
-                        if let Some(sender) = self.shutdown_tx.lock().await.take() {
-                            sender.send(());
+                match (state, access_token) {
+                    (Some(state), Some(access_token)) => match callback(access_token, state) {
+                        Ok(()) => {
+                            if let Some(sender) = self.shutdown_tx.lock().await.take() {
+                                sender.send(()).expect("The Server crashed before shutdown");
+                            }
+                            Ok(Response::new(
+                                "Login Successful. Redirect To Capture App".into(),
+                            ))
                         }
-                        Ok(Response::new(
-                            "Login Successful. Redirect To Capture App".into(),
-                        ))
-                    }
-                    Err(_) => {
-                        let mut not_found = Response::default();
-                        *not_found.status_mut() = StatusCode::NOT_FOUND;
-                        Ok(not_found)
-                    }
+                        Err(_) => not_found(),
+                    },
+                    _ => not_found(),
                 }
             }
-            _ => {
-                let mut not_found = Response::default();
-                *not_found.status_mut() = StatusCode::NOT_FOUND;
-                Ok(not_found)
-            }
+            _ => not_found(),
         }
     }
 }
@@ -279,8 +277,43 @@ mod tests {
         Ok(())
     }
 
-    // Test errors on the callback
-    // Test when the request itself doesn't have fields
+    #[test]
+    fn save_token_route_is_an_error_when_state_is_missing() -> TestResult {
+        let url = "http://localhost:8000/save_token";
+        let req = hyper::Request::builder()
+            .method("POST")
+            .uri(url)
+            .body(Body::from("access_token=token"))
+            .unwrap();
+        let server = HyperWebServer::new(8000);
+
+        let (callback, _) = create_callback_with(move |_token, _state| Ok(()));
+
+        let response = server.route_blocking(req, callback)?;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        Ok(())
+    }
+
+    #[test]
+    fn save_token_route_is_an_error_when_access_token_is_missing() -> TestResult {
+        let url = "http://localhost:8000/save_token";
+        let req = hyper::Request::builder()
+            .method("POST")
+            .uri(url)
+            .body(Body::from("state=10"))
+            .unwrap();
+        let server = HyperWebServer::new(8000);
+
+        let (callback, _) = create_callback_with(move |_token, _state| Ok(()));
+
+        let response = server.route_blocking(req, callback)?;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        Ok(())
+    }
 
     fn create_webserver() -> (HyperWebServer, u16) {
         let port = port_check::free_local_port().expect("Could not find free port!");
