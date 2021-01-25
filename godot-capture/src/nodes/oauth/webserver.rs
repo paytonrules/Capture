@@ -4,12 +4,25 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::runtime::Runtime;
 use tokio::sync::{
     oneshot::{self, Sender},
     Mutex,
 };
 use url::form_urlencoded;
+
+#[derive(Debug, Error)]
+enum RequestError {
+    #[error("State Not Found")]
+    StateNotFound,
+
+    #[error("Access Token Not Found")]
+    AccessTokenNotFound,
+
+    #[error("Could Not Lock Shutdown Channel")]
+    CouldNotLockShutdownChannel,
+}
 
 const LOGIN_SUCCESSFUL_PAGE: &'static str = r#"<!DOCTYPE html>
 
@@ -68,37 +81,47 @@ impl HyperWebServer {
         match (req.method(), req.uri().path()) {
             (&Method::GET, "/capture/") => Ok(Response::new(Body::from(LOGIN_SUCCESSFUL_PAGE))),
             (&Method::POST, "/save_token") => {
-                // I stole this straight from the example code at
-                // https://github.com/hyperium/hyper/blob/master/examples/params.rs
-                let b = hyper::body::to_bytes(req).await?;
-                //
-                let params = form_urlencoded::parse(b.as_ref())
-                    .into_owned()
-                    .collect::<HashMap<String, String>>();
-
-                let state = params
-                    .get("state")
-                    .and_then(|state| state.parse::<i16>().ok());
-
-                let access_token = params.get("access_token");
-
-                match (state, access_token) {
-                    (Some(state), Some(access_token)) => match callback(access_token, state) {
-                        Ok(()) => {
-                            if let Some(sender) = self.shutdown_tx.lock().await.take() {
-                                sender.send(()).expect("The Server crashed before shutdown");
-                            }
-                            Ok(Response::new(
-                                "Login Successful. Redirect To Capture App".into(),
-                            ))
-                        }
-                        Err(_) => not_found(),
-                    },
-                    _ => not_found(),
+                if let Ok(sender) = self.handle_save_token(req, callback).await {
+                    sender.send(()).expect("The Server crashed before shutdown");
+                    Ok(Response::new(
+                        "Login Successful. Redirect To Capture App".into(),
+                    ))
+                } else {
+                    not_found()
                 }
             }
             _ => not_found(),
         }
+    }
+
+    async fn handle_save_token(
+        self,
+        req: Request<Body>,
+        callback: Arc<impl Fn(&str, i16) -> Result<(), TokenError> + 'static + Send + Sync>,
+    ) -> Result<Sender<()>, Box<dyn std::error::Error>> {
+        // I stole this straight from the example code at
+        // https://github.com/hyperium/hyper/blob/master/examples/params.rs
+        let b = hyper::body::to_bytes(req).await?;
+
+        let params = form_urlencoded::parse(b.as_ref())
+            .into_owned()
+            .collect::<HashMap<String, String>>();
+
+        let state = params
+            .get("state")
+            .and_then(|state| state.parse::<i16>().ok())
+            .ok_or(RequestError::StateNotFound)?;
+
+        let access_token = params
+            .get("access_token")
+            .ok_or(RequestError::AccessTokenNotFound)?;
+
+        callback(access_token, state)?;
+        self.shutdown_tx
+            .lock()
+            .await
+            .take()
+            .ok_or(Box::new(RequestError::CouldNotLockShutdownChannel))
     }
 }
 
