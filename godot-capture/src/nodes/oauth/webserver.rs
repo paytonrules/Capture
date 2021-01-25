@@ -77,7 +77,9 @@ impl HyperWebServer {
                     .and_then(|state| state.parse::<i16>().ok())
                     .unwrap();
 
-                match callback(params.get("access_token").unwrap_or(&"".to_string()), state) {
+                let access_token = params.get("access_token").unwrap();
+
+                match callback(access_token, state) {
                     Ok(()) => {
                         if let Some(sender) = self.shutdown_tx.lock().await.take() {
                             sender.send(());
@@ -148,7 +150,6 @@ impl WebServer for HyperWebServer {
 
 #[cfg(test)]
 mod tests {
-    use serial_test::serial;
     use std::cell::RefCell;
     use std::sync::Mutex;
 
@@ -191,9 +192,9 @@ mod tests {
 
         webserver.launch(|_first, _second| Ok(()));
 
-        let r = post(&url).send_form(&[("token", "token"), ("state", "1")]);
+        let r = post(&url).send_form(&[("access_token", "token"), ("state", "1")]);
         assert!(r.ok());
-        let r = post(&url).send_form(&[("token", "token"), ("state", "1")]);
+        let r = post(&url).send_form(&[("access_token", "token"), ("state", "1")]);
         assert!(r.error());
     }
 
@@ -207,7 +208,7 @@ mod tests {
             .unwrap();
         let server = HyperWebServer::new(8000);
 
-        let (callback, _) = create_callback_with(move |token, state| Ok(()));
+        let (callback, _) = create_callback_with(move |_token, _state| Ok(()));
 
         let mut response = server.route_blocking(req, callback)?;
         assert_eq!(
@@ -250,7 +251,7 @@ mod tests {
             .unwrap();
         let server = HyperWebServer::new(8000);
 
-        let (callback, called) = create_callback_with(move |token, state| Ok(()));
+        let (callback, called) = create_callback_with(move |_token, _state| Ok(()));
 
         server.route_blocking(req, callback)?;
 
@@ -264,7 +265,7 @@ mod tests {
         let req = hyper::Request::builder()
             .method("POST")
             .uri(url)
-            .body(Body::from("?access_token=token&state=1"))
+            .body(Body::from("access_token=token&state=1"))
             .unwrap();
         let server = HyperWebServer::new(8000);
 
