@@ -20,15 +20,6 @@ impl OAuthProvider {
         server.launch(move |returned_token, returned_state| {
             token_receiver.token_received(returned_token, returned_state)
         });
-        /*
-        thread::spawn(move || {
-            while let Ok((token, returned_state)) = token.recv() {
-                match token_receiver.token_received(token.as_str(), returned_state) {
-                    Ok(_) => break,
-                    Err(err) => eprintln!("Error receiving token {:?}", err),
-                }
-            }
-        });*/
 
         Ok(login_url)
     }
