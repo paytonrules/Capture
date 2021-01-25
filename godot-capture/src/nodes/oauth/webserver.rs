@@ -77,7 +77,7 @@ impl HyperWebServer {
                     .and_then(|state| state.parse::<i16>().ok())
                     .unwrap();
 
-                match callback(params.get("token").unwrap_or(&"".to_string()), state) {
+                match callback(params.get("access_token").unwrap_or(&"".to_string()), state) {
                     Ok(()) => {
                         if let Some(sender) = self.shutdown_tx.lock().await.take() {
                             sender.send(());
@@ -224,7 +224,7 @@ mod tests {
         let req = hyper::Request::builder()
             .method("POST")
             .uri(url)
-            .body(Body::from("token=token&state=1"))
+            .body(Body::from("access_token=token&state=1"))
             .unwrap();
         let server = HyperWebServer::new(8000);
 
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn router_does_not_call_the_callback_on_save_token_as_a_get() -> TestResult {
-        let url = "http://localhost:8000/save_token?token=token&state=1";
+        let url = "http://localhost:8000/save_token";
         let req = hyper::Request::builder()
             .method("GET")
             .uri(url)
@@ -264,7 +264,7 @@ mod tests {
         let req = hyper::Request::builder()
             .method("POST")
             .uri(url)
-            .body(Body::from("?token=token&state=1"))
+            .body(Body::from("?access_token=token&state=1"))
             .unwrap();
         let server = HyperWebServer::new(8000);
 
@@ -277,8 +277,9 @@ mod tests {
 
         Ok(())
     }
-    // Test capture function sends the 'channel' oneshot on success
-    // Test webserver shuts down gracefully when the callback fn returns Ok
+
+    // Test errors on the callback
+    // Test when the request itself doesn't have fields
 
     fn create_webserver() -> (HyperWebServer, u16) {
         let port = port_check::free_local_port().expect("Could not find free port!");
